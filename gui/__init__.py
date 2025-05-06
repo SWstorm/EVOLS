@@ -1,0 +1,2 @@
+def style():
+    return None
