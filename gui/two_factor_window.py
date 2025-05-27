@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
-from utils.theme_manager import ThemeManager
+from utils.design_system import DesignSystem, UIComponents
+
 
 
 class TwoFactorWindow:
@@ -24,7 +25,7 @@ class TwoFactorWindow:
         self.window.grid_rowconfigure(0, weight=1)
 
         # Применяем тему
-        ThemeManager.setup_theme(self.window)
+        DesignSystem.setup_DesignSystem(self.window)
 
         self.setup_ui()
 
@@ -46,21 +47,21 @@ class TwoFactorWindow:
         ctk.CTkLabel(
             main_frame,
             text="Двухфакторная аутентификация",
-            font=ThemeManager.get_title_font()
+            font=DesignSystem.get_title_font()
         ).grid(row=0, column=0, pady=(0, 20))
 
         # Инструкция
         ctk.CTkLabel(
             main_frame,
             text="Введите код из приложения аутентификатора:",
-            font=ThemeManager.get_normal_font()
+            font=DesignSystem.get_normal_font()
         ).grid(row=1, column=0, sticky="w", pady=(0, 10))
 
         # Поле для ввода кода
         self.code_entry = ctk.CTkEntry(
             main_frame,
             width=150,
-            font=ThemeManager.get_normal_font()
+            font=DesignSystem.get_normal_font()
         )
         self.code_entry.grid(row=2, column=0, pady=(0, 20))
 
@@ -72,7 +73,7 @@ class TwoFactorWindow:
             button_frame,
             text="Подтвердить",
             width=150,
-            font=ThemeManager.get_button_font(),
+            font=DesignSystem.get_button_font(),
             command=self.on_submit
         ).grid(row=0, column=0, padx=10)
 
@@ -80,7 +81,7 @@ class TwoFactorWindow:
             button_frame,
             text="Отмена",
             width=100,
-            font=ThemeManager.get_button_font(),
+            font=DesignSystem.get_button_font(),
             fg_color="#9E9E9E",
             hover_color="#757575",
             command=self.on_close

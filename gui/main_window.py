@@ -2,8 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox, simpledialog, filedialog
 import os
 import tkinter as tk
-from utils.theme_manager import ThemeManager
-
+from utils.design_system import DesignSystem, ThemeManager
 
 class MainWindow:
     def __init__(self, root, db, encryptor):
@@ -20,11 +19,11 @@ class MainWindow:
         self.idle_timeout = 5 * 60 * 1000
 
         # Применяем тему приложения
-        ThemeManager.setup_theme(root)
+        DesignSystem.setup_theme(root)
 
         # Настройка размера и заголовка основного окна
         self.root.title("EVOLS Password Manager")
-        self.root.geometry(f"{ThemeManager.WINDOW_WIDTH}x{ThemeManager.WINDOW_HEIGHT}")
+        self.root.geometry(f"{DesignSystem.WINDOW_MIN_WIDTH}x{DesignSystem.WINDOW_MIN_HEIGHT}")
         self.root.minsize(700, 500)  # Минимальный размер окна
 
         # Загружаем настройки
@@ -47,11 +46,23 @@ class MainWindow:
             if os.path.exists("app_settings.json"):
                 with open("app_settings.json", "r", encoding="utf-8") as f:
                     settings = json.load(f)
-                    # Получаем время автоматической блокировки (в минутах) и переводим в миллисекунды
-                    self.idle_timeout = settings.get("auto_lock_time", 5) * 60 * 1000
+                    # Безопасное получение и приведение к int
+                    auto_lock_time = settings.get("auto_lock_time", 5)
+
+                    # Приводим к int, если значение строка
+                    if isinstance(auto_lock_time, str):
+                        try:
+                            auto_lock_time = int(auto_lock_time) if auto_lock_time.isdigit() else 5
+                        except (ValueError, AttributeError):
+                            auto_lock_time = 5
+                    elif not isinstance(auto_lock_time, (int, float)):
+                        auto_lock_time = 5
+
+                    # Переводим в миллисекунды
+                    self.idle_timeout = auto_lock_time * 60 * 1000
             else:
                 # Настройки по умолчанию, если файл не существует
-                self.idle_timeout = 5 * 60 * 1000  # 5 минут
+                self.idle_timeout = 5 * 60 * 1000
         except Exception as e:
             print(f"Ошибка при загрузке настроек: {e}")
             # Значения по умолчанию
@@ -76,58 +87,25 @@ class MainWindow:
         # Скрываем главное окно
         self.root.withdraw()
 
-        # Функция для проверки пароля и разблокировки
-        def authenticate():
-            # Запрос мастер-пароля
-            master_password = simpledialog.askstring("Разблокировка",
-                                                     "Введите мастер-пароль для разблокировки:",
-                                                     show='*')
-            if not master_password:
-                # Если пользователь отменил ввод, выходим из приложения
-                self.root.destroy()
-                return
+        def on_unlock_success():
+            """Вызывается при успешной разблокировке."""
+            self.root.deiconify()  # Показываем главное окно
+            self.setup_idle_timer()  # Перезапускаем таймер бездействия
 
-            try:
-                # Пытаемся проверить пароль
-                from crypto import Encryptor
-                with open("vault.salt", "rb") as f:
-                    salt = f.read()
-                test_encryptor = Encryptor(master_password, salt)
+        def on_unlock_cancel():
+            """Вызывается при отмене разблокировки."""
+            self.root.quit()
+            self.root.destroy()
+            import sys
+            sys.exit(0)
 
-                # Проверка 2FA если настроена
-                if os.path.exists("2fa_secret.key"):
-                    import pyotp
-
-                    with open("2fa_secret.key", "r") as f:
-                        secret_key = f.read().strip()
-
-                    totp_code = simpledialog.askstring("Двухфакторная аутентификация",
-                                                       "Введите код из приложения аутентификатора:",
-                                                       show='*')
-
-                    if not totp_code:
-                        # Если пользователь отменил ввод, выходим из приложения
-                        self.root.destroy()
-                        return
-
-                    totp = pyotp.TOTP(secret_key)
-                    if not totp.verify(totp_code):
-                        messagebox.showerror("Ошибка", "Неверный код аутентификации")
-                        self.root.destroy()
-                        return
-
-                # Если все проверки прошли успешно, показываем окно приложения
-                self.root.deiconify()
-                # Сбрасываем таймер бездействия
-                self.setup_idle_timer()
-
-            except Exception:
-                messagebox.showerror("Ошибка", "Неверный мастер-пароль")
-                # В случае ошибки повторяем запрос пароля
-                authenticate()
-
-        # Запускаем процесс аутентификации
-        authenticate()
+        # Импортируем и показываем стилизованное окно разблокировки
+        from gui.unlock_window import UnlockWindow
+        unlock_window = UnlockWindow(
+            parent=self.root,
+            on_success_callback=on_unlock_success,
+            on_cancel_callback=on_unlock_cancel
+        )
 
     def setup_ui(self):
         # Очищаем окно
@@ -149,14 +127,14 @@ class MainWindow:
 
         # Боковая панель фиксированной ширины
         self.sidebar = ctk.CTkFrame(main_container, width=220, corner_radius=0)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(ThemeManager.PADDING_NORMAL, 0),
-                          pady=ThemeManager.PADDING_NORMAL)
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(DesignSystem.SPACE_4, 0),
+                          pady=DesignSystem.SPACE_4)
         self.sidebar.grid_propagate(False)  # Фиксируем размер
 
         # Главная панель растягивается
         main_panel = ctk.CTkFrame(main_container)
-        main_panel.grid(row=0, column=1, sticky="nsew", padx=ThemeManager.PADDING_NORMAL,
-                        pady=ThemeManager.PADDING_NORMAL)
+        main_panel.grid(row=0, column=1, sticky="nsew", padx=DesignSystem.SPACE_4,
+                        pady=DesignSystem.SPACE_4)
         main_panel.grid_columnconfigure(0, weight=1)
         main_panel.grid_rowconfigure(1, weight=1)  # Область списка паролей растягивается
 
@@ -170,7 +148,7 @@ class MainWindow:
         logo_label = ctk.CTkLabel(
             self.sidebar,
             text="EVOLS",
-            font=ThemeManager.get_title_font()
+            font=DesignSystem.get_title_font()
         )
         logo_label.grid(row=0, column=0, pady=(30, 20))
 
@@ -188,36 +166,36 @@ class MainWindow:
                 self.sidebar,
                 text=data["text"],
                 command=data["command"],
-                font=ThemeManager.get_normal_font(),
+                font=DesignSystem.get_body_font(),
                 height=40,
                 width=180,
-                fg_color=ThemeManager.PRIMARY_COLOR,
+                fg_color=DesignSystem.PRIMARY,
                 hover_color="#1565C0"
             )
-            btn.grid(row=i + 1, column=0, pady=ThemeManager.PADDING_SMALL, sticky="ew")
+            btn.grid(row=i + 1, column=0, pady=DesignSystem.SPACE_2, sticky="ew")
 
         # Заголовок основной области
         header_frame = ctk.CTkFrame(main_panel, fg_color="transparent")
-        header_frame.grid(row=0, column=0, sticky="ew", padx=ThemeManager.PADDING_NORMAL,
-                          pady=ThemeManager.PADDING_NORMAL)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=DesignSystem.SPACE_4,
+                          pady=DesignSystem.SPACE_4)
         header_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             header_frame,
             text="Ваши пароли",
-            font=ThemeManager.get_title_font()
+            font=DesignSystem.get_title_font()
         ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkLabel(
             header_frame,
             text="Надежное хранилище для ваших данных",
-            font=ThemeManager.get_normal_font()
+            font=DesignSystem.get_body_font()
         ).grid(row=1, column=0, sticky="w", pady=(5, 0))
 
         # Создаем контейнер для списка паролей с прокруткой
         self.password_container = ctk.CTkScrollableFrame(main_panel)
-        self.password_container.grid(row=1, column=0, sticky="nsew", padx=ThemeManager.PADDING_NORMAL,
-                                     pady=(0, ThemeManager.PADDING_NORMAL))
+        self.password_container.grid(row=1, column=0, sticky="nsew", padx=DesignSystem.SPACE_4,
+                                     pady=(0, DesignSystem.SPACE_4))
 
         # Настраиваем сетку для password_container
         self.password_container.grid_columnconfigure(0, weight=1)
@@ -238,7 +216,7 @@ class MainWindow:
             empty_label = ctk.CTkLabel(
                 self.password_container,
                 text="У вас пока нет сохраненных паролей",
-                font=ThemeManager.get_normal_font()
+                font=DesignSystem.get_body_font()
             )
             empty_label.grid(row=0, column=0, pady=(50, 10))
 
@@ -246,8 +224,8 @@ class MainWindow:
                 self.password_container,
                 text="Добавить пароль",
                 command=self.show_add_password,
-                font=ThemeManager.get_normal_font(),
-                fg_color=ThemeManager.SUCCESS_COLOR,
+                font=DesignSystem.get_body_font(),
+                fg_color=DesignSystem.SUCCESS,
                 hover_color="#388E3C"
             )
             add_btn.grid(row=1, column=0, pady=10)
@@ -280,14 +258,14 @@ class MainWindow:
             title_label = ctk.CTkLabel(
                 info_frame,
                 text=title,
-                font=ThemeManager.get_button_font()
+                font=DesignSystem.get_button_font()
             )
             title_label.grid(row=0, column=0, sticky="w")
 
             category_label = ctk.CTkLabel(
                 info_frame,
                 text=f"Категория: {category}" if category else "",
-                font=ThemeManager.get_normal_font()
+                font=DesignSystem.get_body_font()
             )
             category_label.grid(row=1, column=0, sticky="w", pady=(5, 0))
 
@@ -299,7 +277,7 @@ class MainWindow:
                 btn_frame,
                 text="Просмотр",
                 width=100,
-                font=ThemeManager.get_normal_font(),
+                font=DesignSystem.get_body_font(),
                 command=lambda pid=id: self.view_password_by_id(pid)
             )
             view_btn.grid(row=0, column=0)
@@ -354,16 +332,16 @@ class MainWindow:
 
         # Основной фрейм содержимого
         main_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-        main_frame.grid(row=0, column=0, sticky="ew", padx=ThemeManager.PADDING_LARGE, pady=ThemeManager.PADDING_LARGE)
+        main_frame.grid(row=0, column=0, sticky="ew", padx=DesignSystem.SPACE_8, pady=DesignSystem.SPACE_8)
         main_frame.grid_columnconfigure(1, weight=1)  # Растягиваем поля ввода
 
         # Заголовок
         header = ctk.CTkLabel(
             main_frame,
             text=f"Пароль: {password_data['title']}",
-            font=ThemeManager.get_title_font()
+            font=DesignSystem.get_title_font()
         )
-        header.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, ThemeManager.PADDING_LARGE))
+        header.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, DesignSystem.SPACE_8))
 
         # Отображаем информацию о пароле
         fields = [
@@ -384,8 +362,8 @@ class MainWindow:
             ctk.CTkLabel(
                 main_frame,
                 text=field["label"],
-                font=ThemeManager.get_button_font()
-            ).grid(row=field["row"], column=0, sticky="nw", pady=ThemeManager.PADDING_NORMAL)
+                font=DesignSystem.get_button_font()
+            ).grid(row=field["row"], column=0, sticky="nw", pady=DesignSystem.SPACE_4)
 
             if field.get("is_entry"):
                 # Создаем переменную для поля ввода
@@ -397,11 +375,11 @@ class MainWindow:
                     main_frame,
                     textvariable=var,
                     width=300,
-                    font=ThemeManager.get_normal_font()
+                    font=DesignSystem.get_body_font()
                 )
                 if field.get("is_password"):
                     entry.configure(show="*")
-                entry.grid(row=field["row"], column=1, sticky="ew", pady=ThemeManager.PADDING_NORMAL)
+                entry.grid(row=field["row"], column=1, sticky="ew", pady=DesignSystem.SPACE_4)
 
                 # Кнопка показать/скрыть для пароля
                 if field.get("is_password"):
@@ -418,10 +396,10 @@ class MainWindow:
                         text="Показать",
                         command=toggle_password,
                         width=80,
-                        font=ThemeManager.get_normal_font()
+                        font=DesignSystem.get_body_font()
                     )
-                    show_button.grid(row=field["row"], column=2, padx=(ThemeManager.PADDING_SMALL, 0),
-                                     pady=ThemeManager.PADDING_NORMAL)
+                    show_button.grid(row=field["row"], column=2, padx=(DesignSystem.SPACE_2, 0),
+                                     pady=DesignSystem.SPACE_4)
 
             elif field.get("is_textbox"):
                 # Текстовое поле для заметок
@@ -429,9 +407,9 @@ class MainWindow:
                     main_frame,
                     width=300,
                     height=100,
-                    font=ThemeManager.get_normal_font()
+                    font=DesignSystem.get_body_font()
                 )
-                notes_text.grid(row=field["row"], column=1, columnspan=2, sticky="ew", pady=ThemeManager.PADDING_NORMAL)
+                notes_text.grid(row=field["row"], column=1, columnspan=2, sticky="ew", pady=DesignSystem.SPACE_4)
                 notes_text.insert("1.0", field["value"])
                 notes_text.configure(state="disabled")
 
@@ -440,12 +418,12 @@ class MainWindow:
                 ctk.CTkLabel(
                     main_frame,
                     text=field["value"],
-                    font=ThemeManager.get_normal_font()
-                ).grid(row=field["row"], column=1, sticky="w", pady=ThemeManager.PADDING_NORMAL)
+                    font=DesignSystem.get_body_font()
+                ).grid(row=field["row"], column=1, sticky="w", pady=DesignSystem.SPACE_4)
 
         # Фрейм для кнопок внутри скролл области
         buttons_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        buttons_frame.grid(row=7, column=0, columnspan=3, pady=ThemeManager.PADDING_NORMAL)
+        buttons_frame.grid(row=7, column=0, columnspan=3, pady=DesignSystem.SPACE_4)
         buttons_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
         # Функции копирования
@@ -464,7 +442,7 @@ class MainWindow:
             buttons_frame,
             text="Копировать логин",
             command=copy_username,
-            font=ThemeManager.get_normal_font(),
+            font=DesignSystem.get_body_font(),
             width=150
         ).grid(row=0, column=0, padx=5)
 
@@ -472,7 +450,7 @@ class MainWindow:
             buttons_frame,
             text="Копировать пароль",
             command=copy_password,
-            font=ThemeManager.get_normal_font(),
+            font=DesignSystem.get_body_font(),
             width=150
         ).grid(row=0, column=1, padx=5)
 
@@ -481,7 +459,7 @@ class MainWindow:
             buttons_frame,
             text="Закрыть",
             command=view_window.destroy,
-            font=ThemeManager.get_normal_font(),
+            font=DesignSystem.get_body_font(),
             width=100
         ).grid(row=0, column=2, padx=5)
 
@@ -495,9 +473,9 @@ class MainWindow:
             bottom_frame,
             text="Удалить пароль",
             command=lambda: self.delete_password_and_close(password_id, widget, view_window),
-            fg_color=ThemeManager.WARNING_COLOR,
+            fg_color=DesignSystem.DANGER,
             hover_color="#C62828",
-            font=ThemeManager.get_button_font()
+            font=DesignSystem.get_button_font()
         )
         delete_button.grid(row=0, column=0, pady=5)
 
@@ -550,21 +528,21 @@ class MainWindow:
 
             # Создаем основной фрейм с отступами
             main_frame = ctk.CTkFrame(select_window)
-            main_frame.grid(row=0, column=0, sticky="nsew", padx=ThemeManager.PADDING_LARGE,
-                            pady=ThemeManager.PADDING_LARGE)
+            main_frame.grid(row=0, column=0, sticky="nsew", padx=DesignSystem.SPACE_8,
+                            pady=DesignSystem.SPACE_8)
             main_frame.grid_columnconfigure(0, weight=1)
             main_frame.grid_rowconfigure(1, weight=1)
 
             ctk.CTkLabel(
                 main_frame,
                 text="Выберите пароль для проверки:",
-                font=ThemeManager.get_title_font()
-            ).grid(row=0, column=0, pady=ThemeManager.PADDING_NORMAL)
+                font=DesignSystem.get_title_font()
+            ).grid(row=0, column=0, pady=DesignSystem.SPACE_4)
 
             # Создаем фрейм со скроллом для списка паролей
             scroll_frame = ctk.CTkScrollableFrame(main_frame, width=300, height=150)
-            scroll_frame.grid(row=1, column=0, sticky="nsew", padx=ThemeManager.PADDING_NORMAL,
-                              pady=ThemeManager.PADDING_NORMAL)
+            scroll_frame.grid(row=1, column=0, sticky="nsew", padx=DesignSystem.SPACE_4,
+                              pady=DesignSystem.SPACE_4)
             scroll_frame.grid_columnconfigure(0, weight=1)
 
             selected_id = [None]  # Используем список для хранения выбранного ID
@@ -573,7 +551,7 @@ class MainWindow:
             def select_password(pid):
                 selected_id[0] = pid
                 for btn in buttons:
-                    btn.configure(fg_color=ThemeManager.PRIMARY_COLOR)
+                    btn.configure(fg_color=DesignSystem.PRIMARY)
                 buttons[next(i for i, (_, _id) in enumerate(password_list) if _id == pid)].configure(
                     fg_color="#1565C0"  # Темнее при выборе
                 )
@@ -591,10 +569,10 @@ class MainWindow:
                     scroll_frame,
                     text=title,
                     command=lambda p=pid: select_password(p),
-                    font=ThemeManager.get_normal_font(),
-                    fg_color=ThemeManager.PRIMARY_COLOR
+                    font=DesignSystem.get_body_font(),
+                    fg_color=DesignSystem.PRIMARY
                 )
-                btn.grid(row=i, column=0, sticky="ew", pady=ThemeManager.PADDING_SMALL)
+                btn.grid(row=i, column=0, sticky="ew", pady=DesignSystem.SPACE_2)
                 buttons.append(btn)
                 scroll_frame.grid_rowconfigure(i, weight=0)
 
@@ -609,8 +587,8 @@ class MainWindow:
                 main_frame,
                 text="Проверить",
                 command=on_confirm,
-                font=ThemeManager.get_button_font()
-            ).grid(row=2, column=0, pady=ThemeManager.PADDING_NORMAL)
+                font=DesignSystem.get_button_font()
+            ).grid(row=2, column=0, pady=DesignSystem.SPACE_4)
         else:
             # Если есть только один пароль
             frame = selected_frames[0]
@@ -757,8 +735,8 @@ class MainWindow:
         # Создаем окно с результатами
         strength_window = ctk.CTkToplevel(self.root)
         strength_window.title("Проверка надежности пароля")
-        strength_window.geometry("500x400")
-        strength_window.minsize(450, 350)
+        strength_window.geometry("550x450")
+        strength_window.minsize(500, 400)
         strength_window.transient(self.root)
         strength_window.grab_set()
 
@@ -766,7 +744,7 @@ class MainWindow:
         strength_window.grid_columnconfigure(0, weight=1)
         strength_window.grid_rowconfigure(0, weight=1)
 
-        # Создаем основной фрейм со скроллом
+        # Создаем основной скроллируемый фрейм
         scroll_frame = ctk.CTkScrollableFrame(strength_window)
         scroll_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll_frame.grid_columnconfigure(0, weight=1)
@@ -776,49 +754,106 @@ class MainWindow:
         main_frame.grid(row=0, column=0, sticky="ew")
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # Заголовок
+        # Современный заголовок с иконкой
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        header_frame.grid_columnconfigure(1, weight=1)
+
+        # Иконка
         ctk.CTkLabel(
-            main_frame,
-            text=f"Проверка пароля для: {password_data['title']}",
-            font=ThemeManager.get_title_font()
-        ).grid(row=0, column=0, pady=ThemeManager.PADDING_NORMAL)
+            header_frame,
+            text="🔍",
+            font=("Arial", 32)
+        ).grid(row=0, column=0, padx=(0, 10))
+
+        # Заголовок и подзаголовок
+        title_container = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_container.grid(row=0, column=1, sticky="ew")
+        title_container.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            title_container,
+            text="Анализ надежности пароля",
+            font=DesignSystem.get_title_font(),
+            anchor="w"
+        ).grid(row=0, column=0, sticky="ew")
+
+        ctk.CTkLabel(
+            title_container,
+            text=f"Результаты для: {password_data['title']}",
+            font=DesignSystem.get_caption_font(),
+            text_color=DesignSystem.GRAY_600,
+            anchor="w"
+        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+
+        # Разделительная линия
+        separator = ctk.CTkFrame(main_frame, height=2, fg_color=DesignSystem.GRAY_200)
+        separator.grid(row=1, column=0, sticky="ew", pady=(0, 20))
+
+        # Карточка с результатами
+        results_card = ctk.CTkFrame(main_frame)
+        results_card.grid(row=2, column=0, sticky="ew", pady=(0, 15))
+        results_card.grid_columnconfigure(0, weight=1)
+
+        # Секция оценки
+        score_section = ctk.CTkFrame(results_card, fg_color="transparent")
+        score_section.grid(row=0, column=0, sticky="ew", padx=15, pady=15)
+        score_section.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            score_section,
+            text="📊 Общая оценка",
+            font=DesignSystem.get_button_font(),
+            anchor="w"
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         # Визуальный индикатор надежности
-        progress_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        progress_frame.grid(row=1, column=0, sticky="ew", pady=ThemeManager.PADDING_NORMAL)
+        progress_frame = ctk.CTkFrame(score_section, fg_color="transparent")
+        progress_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         self.create_strength_progress_bar(progress_frame, result['score'])
 
-        # Уровень надежности
-        ctk.CTkLabel(
-            main_frame,
+        # Уровень надежности с цветом
+        strength_color = self.get_strength_color(result['score'])
+        strength_label = ctk.CTkLabel(
+            score_section,
             text=f"Уровень надежности: {result['strength']}",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=2, column=0, sticky="w", pady=ThemeManager.PADDING_SMALL)
+            font=DesignSystem.get_body_font(),
+            text_color=strength_color
+        )
+        strength_label.grid(row=2, column=0, sticky="w", pady=(0, 5))
 
         # Энтропия
         ctk.CTkLabel(
-            main_frame,
-            text=f"Энтропия: {entropy:.2f} бит",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=3, column=0, sticky="w", pady=ThemeManager.PADDING_SMALL)
+            score_section,
+            text=f"Энтропия: {entropy:.1f} бит",
+            font=DesignSystem.get_body_font()
+        ).grid(row=3, column=0, sticky="w")
 
         # Рекомендации
         if result['feedback']:
-            row_idx = 4
+            recommendations_card = ctk.CTkFrame(main_frame)
+            recommendations_card.grid(row=3, column=0, sticky="ew", pady=(0, 15))
+            recommendations_card.grid_columnconfigure(0, weight=1)
+
+            rec_section = ctk.CTkFrame(recommendations_card, fg_color="transparent")
+            rec_section.grid(row=0, column=0, sticky="ew", padx=15, pady=15)
+            rec_section.grid_columnconfigure(0, weight=1)
+
             ctk.CTkLabel(
-                main_frame,
-                text="Рекомендации по улучшению:",
-                font=ThemeManager.get_button_font()
-            ).grid(row=row_idx, column=0, sticky="w", pady=ThemeManager.PADDING_NORMAL)
-            row_idx += 1
+                rec_section,
+                text="💡 Рекомендации по улучшению",
+                font=DesignSystem.get_button_font(),
+                anchor="w"
+            ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
             for i, feedback in enumerate(result['feedback']):
                 ctk.CTkLabel(
-                    main_frame,
+                    rec_section,
                     text=f"• {feedback}",
                     anchor="w",
-                    font=ThemeManager.get_normal_font()
-                ).grid(row=row_idx + i, column=0, sticky="w", pady=ThemeManager.PADDING_SMALL)
+                    font=DesignSystem.get_body_font(),
+                    wraplength=450
+                ).grid(row=i + 1, column=0, sticky="w", pady=2)
 
         # Нижняя панель для кнопки закрытия
         bottom_frame = ctk.CTkFrame(strength_window, fg_color="transparent")
@@ -828,46 +863,56 @@ class MainWindow:
         # Кнопка закрытия
         ctk.CTkButton(
             bottom_frame,
-            text="Закрыть",
+            text="✓ Закрыть",
             command=strength_window.destroy,
-            font=ThemeManager.get_button_font(),
-            width=120
+            font=DesignSystem.get_button_font(),
+            width=120,
+            height=40,
+            corner_radius=8
         ).grid(row=0, column=0)
 
+    def create_strength_progress_bar(self, parent, score):
+        """Создает визуальный индикатор надежности пароля."""
+        parent.grid_columnconfigure(0, weight=1)
+
+        # Определяем цвет в зависимости от оценки
+        color = self.get_strength_color(score)
+
+        # Создаем прогресс-бар
+        progress = ctk.CTkProgressBar(parent, width=350, height=20)
+        progress.grid(row=0, column=0, sticky="ew", padx=(0, DesignSystem.SPACE_4))
+        progress.set(score / 100)
+        progress.configure(progress_color=color)
+
+        # Добавляем текст с процентами
+        ctk.CTkLabel(
+            parent,
+            text=f"{score}/100",
+            font=DesignSystem.get_button_font()
+        ).grid(row=0, column=1, sticky="w", padx=DesignSystem.SPACE_4)
+
+        return parent
+
+    def get_strength_color(self, score):
+        """Возвращает цвет в зависимости от оценки надежности."""
+        if score < 30:
+            return DesignSystem.DANGER
+        elif score < 50:
+            return DesignSystem.WARNING
+        elif score < 70:
+            return "#FFCC00"  # Желтый
+        elif score < 90:
+            return DesignSystem.SUCCESS
+        else:
+            return "#00AA00"  # Темно-зеленый
+
     def show_password_generator(self):
-        """Показывает окно генератора паролей."""
-        # Определяем функцию генерации пароля локально
-        import random
-        import string
-
-        def generate_password(length=16, include_uppercase=True, include_digits=True, include_special=True):
-            chars = string.ascii_lowercase
-            if include_uppercase:
-                chars += string.ascii_uppercase
-            if include_digits:
-                chars += string.digits
-            if include_special:
-                chars += string.punctuation
-
-            password = []
-            if include_uppercase:
-                password.append(random.choice(string.ascii_uppercase))
-            if include_digits:
-                password.append(random.choice(string.digits))
-            if include_special:
-                password.append(random.choice(string.punctuation))
-
-            remaining_length = length - len(password)
-            password.extend(random.choice(chars) for _ in range(remaining_length))
-
-            random.shuffle(password)
-            return ''.join(password)
-
-        # Создаем окно
+        """Показывает окно генератора паролей с адаптивным дизайном."""
+        # Создаем окно с увеличенным размером
         gen_window = ctk.CTkToplevel(self.root)
         gen_window.title("Генератор паролей")
-        gen_window.geometry("500x400")
-        gen_window.minsize(400, 350)
+        gen_window.geometry("600x500")  # Увеличиваем размер
+        gen_window.minsize(500, 450)  # Увеличиваем минимальный размер
 
         # Настройка адаптивности окна
         gen_window.grid_columnconfigure(0, weight=1)
@@ -877,50 +922,67 @@ class MainWindow:
         gen_window.transient(self.root)
         gen_window.grab_set()
 
-        # Основной контейнер с отступами
-        main_frame = ctk.CTkFrame(gen_window)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_rowconfigure((0, 1, 2), weight=0)
+        # Основной скроллируемый контейнер для предотвращения обрезания
+        scroll_frame = ctk.CTkScrollableFrame(gen_window)
+        scroll_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        scroll_frame.grid_columnconfigure(0, weight=1)
+
+        # Основной контейнер с правильной адаптивностью
+        main_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        main_frame.grid(row=0, column=0, sticky="ew")
+        main_frame.grid_columnconfigure(0, weight=1)  # Растягиваем по горизонтали
 
         # Заголовок
-        ctk.CTkLabel(
+        title_label = ctk.CTkLabel(
             main_frame,
             text="Генератор паролей",
-            font=ThemeManager.get_title_font()
-        ).grid(row=0, column=0, pady=(0, ThemeManager.PADDING_LARGE))
+            font=DesignSystem.get_title_font()
+        )
+        title_label.grid(row=0, column=0, pady=(0, DesignSystem.SPACE_8), sticky="ew")
 
-        # Настройки генератора
+        # Настройки генератора с адаптивностью
         options_frame = ctk.CTkFrame(main_frame)
-        options_frame.grid(row=1, column=0, sticky="ew", pady=ThemeManager.PADDING_NORMAL)
-        options_frame.grid_columnconfigure(1, weight=1)
+        options_frame.grid(row=1, column=0, sticky="ew", pady=DesignSystem.SPACE_4)
+        options_frame.grid_columnconfigure(0, weight=1)  # Растягиваем настройки
 
-        # Длина пароля
+        # Заголовок настроек
         ctk.CTkLabel(
             options_frame,
+            text="Настройки генерации:",
+            font=DesignSystem.get_button_font()
+        ).grid(row=0, column=0, sticky="w", padx=DesignSystem.SPACE_4, pady=(DesignSystem.SPACE_4, 0))
+
+        # Контейнер для длины пароля
+        length_frame = ctk.CTkFrame(options_frame, fg_color="transparent")
+        length_frame.grid(row=1, column=0, sticky="ew", padx=DesignSystem.SPACE_4, pady=DesignSystem.SPACE_2)
+        length_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            length_frame,
             text="Длина пароля:",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=0, column=0, padx=ThemeManager.PADDING_NORMAL, pady=ThemeManager.PADDING_NORMAL, sticky="w")
+            font=DesignSystem.get_body_font()
+        ).grid(row=0, column=0, sticky="w")
 
+        # Переменные для настроек
         length_var = ctk.IntVar(value=16)
-        length_entry = ctk.CTkEntry(
-            options_frame,
-            textvariable=length_var,
-            width=70,
-            font=ThemeManager.get_normal_font()
-        )
-        length_entry.grid(row=0, column=1, padx=ThemeManager.PADDING_NORMAL, pady=ThemeManager.PADDING_NORMAL,
-                          sticky="w")
-
-        # Флажки для настроек
         uppercase_var = ctk.BooleanVar(value=True)
         digits_var = ctk.BooleanVar(value=True)
         special_var = ctk.BooleanVar(value=True)
+        password_var = ctk.StringVar()
 
+        length_entry = ctk.CTkEntry(
+            length_frame,
+            textvariable=length_var,
+            width=80,  # Уменьшаем ширину
+            font=DesignSystem.get_body_font()
+        )
+        length_entry.grid(row=0, column=1, sticky="w", padx=(DesignSystem.SPACE_4, 0))
+
+        # Флажки для настроек с улучшенным размещением
         checkboxes = [
-            {"text": "Заглавные буквы", "var": uppercase_var, "row": 1},
-            {"text": "Цифры", "var": digits_var, "row": 2},
-            {"text": "Специальные символы", "var": special_var, "row": 3}
+            {"text": "Заглавные буквы (A-Z)", "var": uppercase_var, "row": 2},
+            {"text": "Цифры (0-9)", "var": digits_var, "row": 3},
+            {"text": "Специальные символы (!@#$)", "var": special_var, "row": 4}
         ]
 
         for checkbox in checkboxes:
@@ -928,80 +990,235 @@ class MainWindow:
                 options_frame,
                 text=checkbox["text"],
                 variable=checkbox["var"],
-                font=ThemeManager.get_normal_font()
-            ).grid(row=checkbox["row"], column=0, columnspan=2, padx=ThemeManager.PADDING_NORMAL,
-                   pady=ThemeManager.PADDING_NORMAL, sticky="w")
+                font=DesignSystem.get_body_font()
+            ).grid(row=checkbox["row"], column=0, sticky="w", padx=DesignSystem.SPACE_4,
+                   pady=DesignSystem.SPACE_1)
 
-        # Поле для отображения сгенерированного пароля
+        # Поле для отображения сгенерированного пароля с полной адаптивностью
         result_frame = ctk.CTkFrame(main_frame)
-        result_frame.grid(row=2, column=0, sticky="ew", pady=ThemeManager.PADDING_LARGE)
-        result_frame.grid_columnconfigure(0, weight=1)
+        result_frame.grid(row=2, column=0, sticky="ew", pady=DesignSystem.SPACE_6)
+        result_frame.grid_columnconfigure(0, weight=1)  # Растягиваем поле результата
 
         ctk.CTkLabel(
             result_frame,
             text="Сгенерированный пароль:",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=0, column=0, sticky="w", padx=ThemeManager.PADDING_NORMAL)
+            font=DesignSystem.get_button_font()
+        ).grid(row=0, column=0, sticky="w", padx=DesignSystem.SPACE_4, pady=(DesignSystem.SPACE_4, 0))
 
-        password_var = ctk.StringVar()
+        # Адаптивное поле для пароля
         password_entry = ctk.CTkEntry(
             result_frame,
             textvariable=password_var,
-            width=400,
-            font=ThemeManager.get_normal_font()
+            font=DesignSystem.get_body_font(),
+            state="readonly"
         )
-        password_entry.grid(row=1, column=0, sticky="ew", padx=ThemeManager.PADDING_NORMAL,
-                            pady=ThemeManager.PADDING_NORMAL)
+        password_entry.grid(row=1, column=0, sticky="ew", padx=DesignSystem.SPACE_4,
+                            pady=DesignSystem.SPACE_4)  # sticky="ew" для растягивания
 
-        # Функция генерации пароля
-        def generate():
+        # Информация о пароле
+        info_frame = ctk.CTkFrame(main_frame, fg_color=DesignSystem.GRAY_100)
+        info_frame.grid(row=3, column=0, sticky="ew", pady=DesignSystem.SPACE_4)
+        info_frame.grid_columnconfigure(0, weight=1)
+
+        password_info_var = ctk.StringVar(value="Пароль еще не сгенерирован")
+        info_label = ctk.CTkLabel(
+            info_frame,
+            textvariable=password_info_var,
+            font=DesignSystem.get_caption_font(),
+            text_color=DesignSystem.GRAY_600
+        )
+        info_label.grid(row=0, column=0, padx=DesignSystem.SPACE_4, pady=DesignSystem.SPACE_3)
+
+        # Функция генерации пароля с обновлением информации
+        def generate_password():
+            """Генерирует пароль с заданными параметрами"""
             try:
-                length = length_var.get()
-                if length < 4:
-                    messagebox.showerror("Ошибка", "Длина пароля должна быть не менее 4 символов")
+                import random
+                import string
+
+                # Получаем длину пароля
+                try:
+                    length = length_var.get()
+                    if length < 4:
+                        messagebox.showerror("Ошибка", "Длина пароля должна быть не менее 4 символов")
+                        return
+                    if length > 128:
+                        messagebox.showerror("Ошибка", "Длина пароля не должна превышать 128 символов")
+                        return
+                except (ValueError, tk.TclError):
+                    messagebox.showerror("Ошибка", "Введите корректное число для длины пароля")
                     return
 
-                password = generate_password(
-                    length=length,
-                    include_uppercase=uppercase_var.get(),
-                    include_digits=digits_var.get(),
-                    include_special=special_var.get()
-                )
-                password_var.set(password)
+                # Формируем набор символов
+                chars = ""
+                required_chars = []
+                char_types = []
+
+                # Строчные буквы всегда включены
+                chars += string.ascii_lowercase
+                required_chars.append(random.choice(string.ascii_lowercase))
+                char_types.append("строчные буквы")
+
+                if uppercase_var.get():
+                    chars += string.ascii_uppercase
+                    required_chars.append(random.choice(string.ascii_uppercase))
+                    char_types.append("заглавные буквы")
+
+                if digits_var.get():
+                    chars += string.digits
+                    required_chars.append(random.choice(string.digits))
+                    char_types.append("цифры")
+
+                if special_var.get():
+                    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+                    chars += special_chars
+                    required_chars.append(random.choice(special_chars))
+                    char_types.append("спец. символы")
+
+                if not chars:
+                    messagebox.showerror("Ошибка", "Выберите хотя бы один тип символов")
+                    return
+
+                # Генерируем пароль
+                password_list = required_chars.copy()
+
+                for _ in range(length - len(required_chars)):
+                    password_list.append(random.choice(chars))
+
+                random.shuffle(password_list)
+                final_password = ''.join(password_list)
+
+                # Обновляем поле пароля
+                password_entry.configure(state="normal")
+                password_var.set(final_password)
+                password_entry.configure(state="readonly")
+
+                # Обновляем информацию о пароле
+                info_text = f"Длина: {length} символов | Типы: {', '.join(char_types)}"
+                password_info_var.set(info_text)
+
+                # Обновляем интерфейс
+                gen_window.update_idletasks()
+
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сгенерировать пароль: {e}")
 
-        # Функция копирования в буфер обмена
+        # Функция копирования
         def copy_to_clipboard():
-            self.root.clipboard_clear()
-            self.root.clipboard_append(password_var.get())
-            messagebox.showinfo("Копирование", "Пароль скопирован в буфер обмена")
+            password = password_var.get()
+            if not password:
+                messagebox.showwarning("Предупреждение", "Сначала сгенерируйте пароль")
+                return
 
-        # Нижняя панель для кнопок
+            try:
+                gen_window.clipboard_clear()
+                gen_window.clipboard_append(password)
+                # Временно показываем статус копирования
+                old_text = password_info_var.get()
+                password_info_var.set("✓ Пароль скопирован в буфер обмена")
+                gen_window.after(2000, lambda: password_info_var.set(old_text))
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось скопировать пароль: {e}")
+
+        def check_strength():
+            password = password_var.get()
+            if not password:
+                messagebox.showwarning("Предупреждение", "Сначала сгенерируйте пароль")
+                return
+
+            score = 0
+            feedback = []
+
+            if len(password) >= 12:
+                score += 25
+            elif len(password) >= 8:
+                score += 15
+            else:
+                feedback.append("Рекомендуется длина не менее 12 символов")
+
+            has_lower = any(c.islower() for c in password)
+            has_upper = any(c.isupper() for c in password)
+            has_digit = any(c.isdigit() for c in password)
+            has_special = any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password)
+
+            char_types = sum([has_lower, has_upper, has_digit, has_special])
+            score += char_types * 15
+
+            if char_types < 3:
+                feedback.append("Используйте больше типов символов")
+
+            if score >= 70:
+                strength = "Отличный"
+            elif score >= 50:
+                strength = "Хороший"
+            elif score >= 30:
+                strength = "Средний"
+            else:
+                strength = "Слабый"
+
+            message = f"Надежность: {strength} ({score}/100 баллов)"
+            if feedback:
+                message += f"\n\nРекомендации:\n• " + "\n• ".join(feedback)
+
+            messagebox.showinfo("Оценка пароля", message)
+
+        # Нижняя панель для кнопок (ВНЕ скролла)
         bottom_frame = ctk.CTkFrame(gen_window, fg_color="transparent")
         bottom_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        bottom_frame.grid_columnconfigure((0, 1), weight=1)
+        bottom_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)  # Равномерное распределение
 
-        # Кнопки действий
-        ctk.CTkButton(
+        # Кнопки с равномерным распределением
+        generate_btn = ctk.CTkButton(
             bottom_frame,
             text="Сгенерировать",
-            command=generate,
-            font=ThemeManager.get_normal_font(),
-            fg_color=ThemeManager.PRIMARY_COLOR,
-            width=150
-        ).grid(row=0, column=0, padx=ThemeManager.PADDING_NORMAL)
+            command=generate_password,
+            font=DesignSystem.get_button_font(),
+            fg_color=DesignSystem.PRIMARY,
+            height=35
+        )
+        generate_btn.grid(row=0, column=0, padx=5, sticky="ew")
 
-        ctk.CTkButton(
+        copy_btn = ctk.CTkButton(
             bottom_frame,
             text="Копировать",
             command=copy_to_clipboard,
-            font=ThemeManager.get_normal_font(),
-            width=150
-        ).grid(row=0, column=1, padx=ThemeManager.PADDING_NORMAL)
+            font=DesignSystem.get_button_font(),
+            fg_color=DesignSystem.SUCCESS,
+            height=35
+        )
+        copy_btn.grid(row=0, column=1, padx=5, sticky="ew")
 
-        # Генерируем пароль при открытии окна
-        generate()
+        strength_btn = ctk.CTkButton(
+            bottom_frame,
+            text="Оценить",
+            command=check_strength,
+            font=DesignSystem.get_button_font(),
+            fg_color=DesignSystem.WARNING,
+            height=35
+        )
+        strength_btn.grid(row=0, column=2, padx=5, sticky="ew")
+
+        close_btn = ctk.CTkButton(
+            bottom_frame,
+            text="Закрыть",
+            command=gen_window.destroy,
+            font=DesignSystem.get_button_font(),
+            fg_color=DesignSystem.GRAY_400,
+            height=35
+        )
+        close_btn.grid(row=0, column=3, padx=5, sticky="ew")
+
+        # Привязка горячих клавиш
+        length_entry.bind("<Return>", lambda event: generate_password())
+        gen_window.bind("<Control-g>", lambda event: generate_password())
+        gen_window.bind("<Control-c>", lambda event: copy_to_clipboard())
+        gen_window.bind("<Escape>", lambda event: gen_window.destroy())
+
+        # Автоматически генерируем пароль при открытии
+        gen_window.after(100, generate_password)
+
+        # Устанавливаем фокус на поле длины
+        length_entry.focus_set()
 
     def create_strength_progress_bar(self, parent, score):
         """Создает визуальный индикатор надежности пароля."""
@@ -1021,7 +1238,7 @@ class MainWindow:
 
         # Создаем прогресс-бар
         progress = ctk.CTkProgressBar(parent, width=300)
-        progress.grid(row=0, column=0, sticky="w", padx=(0, ThemeManager.PADDING_NORMAL))
+        progress.grid(row=0, column=0, sticky="w", padx=(0, DesignSystem.SPACE_4))
         progress.set(score / 100)
         progress.configure(progress_color=color)
 
@@ -1029,8 +1246,8 @@ class MainWindow:
         ctk.CTkLabel(
             parent,
             text=f"{score}%",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=0, column=1, sticky="w", padx=ThemeManager.PADDING_NORMAL)
+            font=DesignSystem.get_body_font()
+        ).grid(row=0, column=1, sticky="w", padx=DesignSystem.SPACE_4)
 
         return parent
 
@@ -1074,42 +1291,42 @@ class MainWindow:
         ctk.CTkLabel(
             main_frame,
             text="Резервное копирование базы данных",
-            font=ThemeManager.get_title_font()
-        ).grid(row=0, column=0, pady=ThemeManager.PADDING_NORMAL)
+            font=DesignSystem.get_title_font()
+        ).grid(row=0, column=0, pady=DesignSystem.SPACE_4)
 
         # Информация
         ctk.CTkLabel(
             main_frame,
             text="Резервная копия будет сохранена по умолчанию в:",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=1, column=0, sticky="w", pady=(ThemeManager.PADDING_NORMAL, 0))
+            font=DesignSystem.get_body_font()
+        ).grid(row=1, column=0, sticky="w", pady=(DesignSystem.SPACE_4, 0))
 
         ctk.CTkLabel(
             main_frame,
             text=backup_path,
-            font=ThemeManager.get_normal_font()
-        ).grid(row=2, column=0, sticky="w", pady=(0, ThemeManager.PADDING_NORMAL))
+            font=DesignSystem.get_body_font()
+        ).grid(row=2, column=0, sticky="w", pady=(0, DesignSystem.SPACE_4))
 
         # Фрейм для выбора пользовательского расположения
         custom_frame = ctk.CTkFrame(main_frame)
-        custom_frame.grid(row=3, column=0, sticky="ew", pady=ThemeManager.PADDING_NORMAL)
+        custom_frame.grid(row=3, column=0, sticky="ew", pady=DesignSystem.SPACE_4)
         custom_frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
             custom_frame,
             text="Или выберите другое расположение:",
-            font=ThemeManager.get_normal_font()
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=ThemeManager.PADDING_SMALL)
+            font=DesignSystem.get_body_font()
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=DesignSystem.SPACE_2)
 
         custom_path_var = ctk.StringVar(value=backup_path)
         path_entry = ctk.CTkEntry(
             custom_frame,
             textvariable=custom_path_var,
-            font=ThemeManager.get_normal_font(),
+            font=DesignSystem.get_body_font(),
             width=300
         )
-        path_entry.grid(row=1, column=0, sticky="ew", padx=(0, ThemeManager.PADDING_SMALL),
-                        pady=ThemeManager.PADDING_SMALL)
+        path_entry.grid(row=1, column=0, sticky="ew", padx=(0, DesignSystem.SPACE_2),
+                        pady=DesignSystem.SPACE_2)
 
         def browse_path():
             # Запрос на выбор директории
@@ -1123,10 +1340,10 @@ class MainWindow:
             custom_frame,
             text="Обзор",
             command=browse_path,
-            font=ThemeManager.get_normal_font(),
+            font=DesignSystem.get_body_font(),
             width=80
         )
-        browse_button.grid(row=1, column=1, sticky="e", pady=ThemeManager.PADDING_SMALL)
+        browse_button.grid(row=1, column=1, sticky="e", pady=DesignSystem.SPACE_2)
 
         # Нижняя панель с кнопками
         button_frame = ctk.CTkFrame(backup_window, fg_color="transparent")
@@ -1156,19 +1373,19 @@ class MainWindow:
             button_frame,
             text="Создать резервную копию",
             command=perform_backup,
-            font=ThemeManager.get_button_font(),
-            fg_color=ThemeManager.SUCCESS_COLOR,
+            font=DesignSystem.get_button_font(),
+            fg_color=DesignSystem.SUCCESS,
             hover_color="#388E3C",
             width=200
-        ).grid(row=0, column=0, padx=ThemeManager.PADDING_NORMAL)
+        ).grid(row=0, column=0, padx=DesignSystem.SPACE_4)
 
         ctk.CTkButton(
             button_frame,
             text="Отмена",
             command=backup_window.destroy,
-            font=ThemeManager.get_button_font(),
+            font=DesignSystem.get_button_font(),
             width=100
-        ).grid(row=0, column=1, padx=ThemeManager.PADDING_NORMAL)
+        ).grid(row=0, column=1, padx=DesignSystem.SPACE_4)
 
     def delete_password(self, password_id, item_frame):
         """Удаляет пароль из базы данных."""

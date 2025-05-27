@@ -1,5 +1,5 @@
 {
-    "auto_lock_time": 1,
+    "auto_lock_time": "2",
     "backup_directory": "C:\\Users\\prost\\OneDrive\\Desktop\\EVOLS\\backups",
     "auto_backup": true
 }

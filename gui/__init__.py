@@ -1,4 +1,4 @@
-from customtkinter import ThemeManager
+from customtkinter import DesignSystem
 
 
 def __init__(self, root, db, encryptor):
@@ -15,6 +15,6 @@ def __init__(self, root, db, encryptor):
     self.idle_timeout = 5 * 60 * 1000
 
     # Применяем тему приложения, передавая корневое окно
-    ThemeManager.setup_theme(root)
+    DesignSystem.setup_theme(root)
 
     # ... остальной код без изменений
