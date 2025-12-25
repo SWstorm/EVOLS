@@ -3,6 +3,7 @@ from tkinter import messagebox
 import os
 import re
 
+
 # === СОВРЕМЕННАЯ СИСТЕМА ДИЗАЙНА (единая с main_window) ===
 class ModernDesign:
     """Крутая система дизайна"""
@@ -13,7 +14,7 @@ class ModernDesign:
     SECONDARY = "#00E5FF"
     SUCCESS = "#00E676"
     DANGER = "#FF1744"
-    WARNING = "#FFD600"
+    WARNING = "#fff28f"
 
     # Фон
     BG_DARK = "#0F172A"
@@ -110,6 +111,12 @@ class ToastNotification:
 
     @staticmethod
     def show(parent, message, type="info", duration=3000):
+        try:
+            if not parent.winfo_exists():
+                return
+        except:
+            return
+
         toast = ctk.CTkFrame(
             parent,
             fg_color=ModernDesign.BG_CARD,
@@ -153,13 +160,7 @@ class ToastNotification:
         toast.place(relx=0.5, rely=0.1, anchor="n")
         toast.lift()
 
-        def fade_out():
-            try:
-                toast.destroy()
-            except:
-                pass
-
-        parent.after(duration, fade_out)
+        parent.after(duration, lambda: toast.destroy() if toast.winfo_exists() else None)
 
 
 class LoginFrame:
@@ -167,9 +168,8 @@ class LoginFrame:
 
     def __init__(self, root, app_instance):
         self.root = root
-        self.app = app_instance  # Ссылка на PasswordVaultApp
+        self.app = app_instance
 
-        # Настройка темы
         ctk.set_appearance_mode("dark")
 
         self.root.title("EVOLS Password Manager")
@@ -177,11 +177,9 @@ class LoginFrame:
         self.root.minsize(900, 650)
         self.root.configure(fg_color=ModernDesign.BG_DARK)
 
-        # Центрируем окно
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
 
-        # Проверяем, существует ли vault
         self.vault_exists = os.path.exists(self.app.get_db_path())
 
         if self.vault_exists:
@@ -198,13 +196,11 @@ class LoginFrame:
         """Экран приветствия для нового пользователя"""
         self.clear_frame()
 
-        # Главный контейнер
         main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
         main_container.grid(row=0, column=0, sticky="nsew")
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=1)
 
-        # Центральная карточка
         card = ctk.CTkFrame(
             main_container,
             fg_color=ModernDesign.BG_CARD,
@@ -259,7 +255,7 @@ class LoginFrame:
         ).pack(pady=(0, 15), padx=30)
 
         # Кнопка создания
-        create_btn = ctk.CTkButton(
+        ctk.CTkButton(
             content,
             text="🚀 Создать хранилище",
             command=self.show_create_vault_screen,
@@ -269,8 +265,7 @@ class LoginFrame:
             fg_color=ModernDesign.PRIMARY,
             hover_color=ModernDesign.PRIMARY_DARK,
             corner_radius=12
-        )
-        create_btn.pack()
+        ).pack()
 
         # Дополнительная информация
         info_frame = ctk.CTkFrame(content, fg_color="transparent")
@@ -299,30 +294,83 @@ class LoginFrame:
                 text_color=ModernDesign.TEXT_SECONDARY
             ).pack(side="left")
 
+    def _create_password_field_with_toggle(self, parent, variable, height=50, placeholder="Пароль"):
+        container = ctk.CTkFrame(parent, fg_color="transparent")
+        container.pack(fill="x", padx=20, pady=20)
+        container.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            container,
+            text="🔑",
+            font=("Segoe UI", 24 if height >= 50 else 20)
+        ).grid(row=0, column=0, padx=(5, 15))
+
+        password_input = ctk.CTkEntry(
+            container,
+            textvariable=variable,
+            show="●",
+            height=height,
+            font=("Segoe UI", 15 if height >= 50 else 14),
+            border_width=0,
+            fg_color=ModernDesign.BG_DARK,
+            placeholder_text=placeholder
+        )
+        password_input.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=2)
+    
+        show_btn = ctk.CTkButton(
+            container,
+            text="",
+            width=50,
+            height=50,
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        show_btn.grid(row=0, column=2)
+
+        icon_label = ctk.CTkLabel(
+            show_btn,
+            text="👁️",
+            font=("Segoe UI Emoji", 25),
+            text_color="white",
+            fg_color="transparent",
+            cursor="hand2"  # ← Курсор руки
+        )
+        icon_label.place(relx=0.5, rely=0.48, anchor="center")
+
+        def on_press(e):
+            password_input.configure(show='')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY_DARK)
+
+        def on_release(e):
+            password_input.configure(show='●')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY)
+
+        # Биндинг на кнопке
+        show_btn.bind("<ButtonPress-1>", on_press)
+        show_btn.bind("<ButtonRelease-1>", on_release)
+        
+        # ВАЖНО: Биндинг на label тоже!
+        icon_label.bind("<ButtonPress-1>", on_press)
+        icon_label.bind("<ButtonRelease-1>", on_release)
+
+        return password_input, show_btn
+
+
     def show_create_vault_screen(self):
         """Экран создания нового vault"""
         self.clear_frame()
 
-        # Главный контейнер
         main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
         main_container.grid(row=0, column=0, sticky="nsew")
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=1)
 
-        # Скроллируемая область
-        scroll_frame = ctk.CTkScrollableFrame(
-            main_container,
-            fg_color="transparent"
-        )
+        scroll_frame = ctk.CTkScrollableFrame(main_container, fg_color="transparent")
         scroll_frame.pack(fill="both", expand=True, padx=20, pady=20)
         scroll_frame.grid_columnconfigure(0, weight=1)
 
-        # Центральная карточка
-        card = ctk.CTkFrame(
-            scroll_frame,
-            fg_color=ModernDesign.BG_CARD,
-            corner_radius=20
-        )
+        card = ctk.CTkFrame(scroll_frame, fg_color=ModernDesign.BG_CARD, corner_radius=20)
         card.pack(pady=20, padx=20)
 
         content = ctk.CTkFrame(card, fg_color="transparent")
@@ -330,72 +378,36 @@ class LoginFrame:
         content.grid_columnconfigure(0, weight=1)
 
         # Заголовок
-        header = ctk.CTkFrame(content, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 30))
-
-        ctk.CTkLabel(
-            header,
-            text="🔐",
-            font=("Segoe UI", 48)
-        ).pack()
-
-        ctk.CTkLabel(
-            header,
-            text="Создание хранилища",
-            font=("Segoe UI", 28, "bold"),
-            text_color=ModernDesign.TEXT_PRIMARY
-        ).pack(pady=(10, 5))
-
-        ctk.CTkLabel(
-            header,
-            text="Придумайте надежный мастер-пароль",
-            font=ModernDesign.get_subtitle_font(),
-            text_color=ModernDesign.TEXT_SECONDARY
-        ).pack()
+        self._create_header(content, "🔐", "Создание хранилища", "Придумайте надежный мастер-пароль")
 
         # Поля ввода
         fields_frame = ctk.CTkFrame(content, fg_color="transparent")
         fields_frame.grid(row=1, column=0, sticky="ew", pady=20)
         fields_frame.grid_columnconfigure(0, weight=1)
 
-        # Переменные
         self.password_var = ctk.StringVar()
         self.confirm_var = ctk.StringVar()
 
-        # Индикатор надежности
-        self.strength_label = ctk.CTkLabel(
-            fields_frame,
-            text="",
-            font=ModernDesign.get_caption_font(),
-            text_color=ModernDesign.TEXT_MUTED
-        )
-
-        self.strength_bar = ctk.CTkProgressBar(
-            fields_frame,
-            width=400,
-            height=8,
-            progress_color=ModernDesign.TEXT_MUTED
-        )
-
-        # Поле мастер-пароля - ИСПРАВЛЕНО!
+        # Поле мастер-пароля
         password_section = ctk.CTkFrame(fields_frame, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
         password_section.grid(row=0, column=0, sticky="ew", pady=(0, 20))
 
-        # Используем pack для правильного выравнивания
-        inner_frame = ctk.CTkFrame(password_section, fg_color="transparent")
-        inner_frame.pack(fill="x", padx=20, pady=20)
+        # Используем метод с меткой
+        pw_container = ctk.CTkFrame(password_section, fg_color="transparent")
+        pw_container.pack(fill="x", padx=20, pady=20)
+        pw_container.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            inner_frame,
+            pw_container,
             text="🔑",
             font=("Segoe UI", 20)
-        ).pack(side="left", padx=(0, 15))
+        ).grid(row=0, column=0, padx=(0, 15))
 
-        password_entry_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
-        password_entry_frame.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        pw_entry_frame = ctk.CTkFrame(pw_container, fg_color="transparent")
+        pw_entry_frame.grid(row=0, column=1, sticky="ew", padx=(0, 10))
 
         ctk.CTkLabel(
-            password_entry_frame,
+            pw_entry_frame,
             text="Мастер-пароль",
             font=("Segoe UI", 11, "bold"),
             text_color=ModernDesign.TEXT_SECONDARY,
@@ -403,7 +415,7 @@ class LoginFrame:
         ).pack(anchor="w", pady=(0, 5))
 
         password_input = ctk.CTkEntry(
-            password_entry_frame,
+            pw_entry_frame,
             textvariable=self.password_var,
             show="●",
             height=45,
@@ -414,22 +426,10 @@ class LoginFrame:
         )
         password_input.pack(fill="x")
 
-        # ИСПРАВЛЕННАЯ функция toggle
-        show_btn_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
-        show_btn_container.pack(side="left")
-
-        def toggle_password():
-            if password_input.cget('show') == '●':
-                password_input.configure(show='')
-                show_btn.configure(text="👁️‍🗨️")
-            else:
-                password_input.configure(show='●')
-                show_btn.configure(text="👁️")
-
+        # Кнопка показать
         show_btn = ctk.CTkButton(
-            show_btn_container,
+            pw_container,
             text="👁️",
-            command=toggle_password,
             width=45,
             height=45,
             font=("Segoe UI", 18),
@@ -437,43 +437,64 @@ class LoginFrame:
             hover_color=ModernDesign.PRIMARY_DARK,
             corner_radius=8
         )
-        show_btn.pack()
+        show_btn.grid(row=0, column=2)
+
+        def on_press(e):
+            password_input.configure(show='')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY_DARK)
+
+        def on_release(e):
+            password_input.configure(show='●')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY)
+
+        show_btn.bind("<ButtonPress-1>", on_press)
+        show_btn.bind("<ButtonRelease-1>", on_release)
 
         # Индикатор надежности
         strength_frame = ctk.CTkFrame(fields_frame, fg_color="transparent")
         strength_frame.grid(row=1, column=0, sticky="ew", pady=(0, 20))
         strength_frame.grid_columnconfigure(0, weight=1)
 
+        self.strength_bar = ctk.CTkProgressBar(
+            strength_frame,
+            width=400,
+            height=8,
+            progress_color=ModernDesign.TEXT_MUTED
+        )
         self.strength_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.strength_bar.set(0)
 
+        self.strength_label = ctk.CTkLabel(
+            strength_frame,
+            text="",
+            font=ModernDesign.get_caption_font(),
+            text_color=ModernDesign.TEXT_MUTED
+        )
         self.strength_label.grid(row=1, column=0, sticky="w")
 
         def on_password_change(*args):
             password = self.password_var.get()
             score, color, hint = PasswordStrengthIndicator.check_strength(password)
-
             self.strength_bar.set(score / 100)
             self.strength_bar.configure(progress_color=color)
             self.strength_label.configure(text=hint, text_color=color)
 
         self.password_var.trace("w", on_password_change)
 
-        # Поле подтверждения - ИСПРАВЛЕНО!
+        # Поле подтверждения (БЕЗ кнопки показать)
         confirm_section = ctk.CTkFrame(fields_frame, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
         confirm_section.grid(row=2, column=0, sticky="ew")
 
-        # Используем pack для правильного выравнивания
-        confirm_inner = ctk.CTkFrame(confirm_section, fg_color="transparent")
-        confirm_inner.pack(fill="x", padx=20, pady=20)
+        confirm_container = ctk.CTkFrame(confirm_section, fg_color="transparent")
+        confirm_container.pack(fill="x", padx=20, pady=20)
 
         ctk.CTkLabel(
-            confirm_inner,
+            confirm_container,
             text="✓",
             font=("Segoe UI", 20)
         ).pack(side="left", padx=(0, 15))
 
-        confirm_entry_frame = ctk.CTkFrame(confirm_inner, fg_color="transparent")
+        confirm_entry_frame = ctk.CTkFrame(confirm_container, fg_color="transparent")
         confirm_entry_frame.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(
@@ -497,7 +518,35 @@ class LoginFrame:
         confirm_input.pack(fill="x")
 
         # Советы
-        tips_frame = ctk.CTkFrame(content, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        self._create_tips_section(content)
+
+        # Кнопки
+        self._create_vault_buttons(content, confirm_input)
+
+    def _create_header(self, parent, icon, title, subtitle):
+        """Создаёт секцию заголовка"""
+        header = ctk.CTkFrame(parent, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 30))
+
+        ctk.CTkLabel(header, text=icon, font=("Segoe UI", 48)).pack()
+
+        ctk.CTkLabel(
+            header,
+            text=title,
+            font=("Segoe UI", 28, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY
+        ).pack(pady=(10, 5))
+
+        ctk.CTkLabel(
+            header,
+            text=subtitle,
+            font=ModernDesign.get_subtitle_font(),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack()
+
+    def _create_tips_section(self, parent):
+        """Создаёт секцию с советами"""
+        tips_frame = ctk.CTkFrame(parent, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
         tips_frame.grid(row=2, column=0, sticky="ew", pady=(0, 30))
 
         tips_header = ctk.CTkFrame(tips_frame, fg_color="transparent")
@@ -537,14 +586,11 @@ class LoginFrame:
                 anchor="w"
             ).pack(side="left")
 
-        ctk.CTkLabel(
-            tips_frame,
-            text="",
-            height=5
-        ).pack()
+        ctk.CTkLabel(tips_frame, text="", height=5).pack()
 
-        # Кнопки
-        buttons_frame = ctk.CTkFrame(content, fg_color="transparent")
+    def _create_vault_buttons(self, parent, confirm_input):
+        """Создаёт кнопки создания vault"""
+        buttons_frame = ctk.CTkFrame(parent, fg_color="transparent")
         buttons_frame.grid(row=3, column=0)
 
         def create_vault():
@@ -572,10 +618,9 @@ class LoginFrame:
                 if not result:
                     return
 
-            # Вызываем метод создания vault из app
             self.app.create_vault_with_password(password)
 
-        create_btn = ctk.CTkButton(
+        ctk.CTkButton(
             buttons_frame,
             text="🚀 Создать хранилище",
             command=create_vault,
@@ -585,10 +630,9 @@ class LoginFrame:
             fg_color=ModernDesign.SUCCESS,
             hover_color="#00C853",
             corner_radius=10
-        )
-        create_btn.grid(row=0, column=0, padx=10)
+        ).grid(row=0, column=0, padx=10)
 
-        back_btn = ctk.CTkButton(
+        ctk.CTkButton(
             buttons_frame,
             text="← Назад",
             command=self.show_welcome_screen,
@@ -598,23 +642,19 @@ class LoginFrame:
             fg_color=ModernDesign.BG_HOVER,
             hover_color="#475569",
             corner_radius=10
-        )
-        back_btn.grid(row=0, column=1, padx=10)
+        ).grid(row=0, column=1, padx=10)
 
-        # Привязка Enter
         confirm_input.bind("<Return>", lambda e: create_vault())
 
     def show_login_screen(self):
-        """Экран входа в существующий vault - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Экран входа в существующий vault"""
         self.clear_frame()
 
-        # Главный контейнер
         main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
         main_container.grid(row=0, column=0, sticky="nsew")
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=1)
 
-        # Центральная карточка
         card = ctk.CTkFrame(
             main_container,
             fg_color=ModernDesign.BG_CARD,
@@ -628,11 +668,7 @@ class LoginFrame:
         content.pack(padx=80, pady=60)
 
         # Логотип
-        ctk.CTkLabel(
-            content,
-            text="🔐",
-            font=("Segoe UI", 70)
-        ).pack(pady=(0, 15))
+        ctk.CTkLabel(content, text="🔐", font=("Segoe UI", 70)).pack(pady=(0, 15))
 
         # Заголовок
         ctk.CTkLabel(
@@ -649,63 +685,17 @@ class LoginFrame:
             text_color=ModernDesign.TEXT_SECONDARY
         ).pack(pady=(5, 40))
 
-        # Поле пароля - ИСПРАВЛЕНО!
+        # Поле пароля с кнопкой показа
         password_section = ctk.CTkFrame(content, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
         password_section.pack(fill="x", pady=(0, 30))
 
-        # Используем pack вместо grid для лучшего выравнивания
-        inner_frame = ctk.CTkFrame(password_section, fg_color="transparent")
-        inner_frame.pack(fill="x", padx=20, pady=20)
-
-        # Иконка ключа
-        ctk.CTkLabel(
-            inner_frame,
-            text="🔑",
-            font=("Segoe UI", 24)
-        ).pack(side="left", padx=(5, 15))
-
-        # Контейнер для поля ввода
-        entry_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
-        entry_container.pack(side="left", fill="x", expand=True, padx=(0, 10))
-
         self.login_password_var = ctk.StringVar()
-
-        password_input = ctk.CTkEntry(
-            entry_container,
-            textvariable=self.login_password_var,
-            show="●",
+        password_input, _ = self._create_password_field_with_toggle(
+            password_section,
+            self.login_password_var,
             height=50,
-            font=("Segoe UI", 15),
-            border_width=0,
-            fg_color=ModernDesign.BG_DARK,
-            placeholder_text="Мастер-пароль"
+            placeholder="Мастер-пароль"
         )
-        password_input.pack(fill="x")
-
-        # ИСПРАВЛЕННАЯ функция toggle - правильная область видимости
-        show_btn_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
-        show_btn_container.pack(side="left")
-
-        def toggle_login_password():
-            if password_input.cget('show') == '●':
-                password_input.configure(show='')
-                show_btn.configure(text="👁️‍🗨️")
-            else:
-                password_input.configure(show='●')
-                show_btn.configure(text="👁️")
-
-        show_btn = ctk.CTkButton(
-            show_btn_container,
-            text="👁️",
-            command=toggle_login_password,
-            width=50,
-            height=50,
-            font=("Segoe UI", 20),
-            fg_color=ModernDesign.PRIMARY,
-            hover_color=ModernDesign.PRIMARY_DARK,
-            corner_radius=8
-        )
-        show_btn.pack()
 
         # Кнопка входа
         def do_login():
@@ -715,10 +705,9 @@ class LoginFrame:
                 ToastNotification.show(self.root, "Введите пароль", "error")
                 return
 
-            # Вызываем метод входа из app
             self.app.login_with_password(password)
 
-        login_btn = ctk.CTkButton(
+        ctk.CTkButton(
             content,
             text="🚀 Войти",
             command=do_login,
@@ -728,8 +717,7 @@ class LoginFrame:
             fg_color=ModernDesign.PRIMARY,
             hover_color=ModernDesign.PRIMARY_DARK,
             corner_radius=12
-        )
-        login_btn.pack()
+        ).pack()
 
         # Информация внизу
         info_frame = ctk.CTkFrame(content, fg_color="transparent")
@@ -742,6 +730,5 @@ class LoginFrame:
             text_color=ModernDesign.TEXT_MUTED
         ).pack()
 
-        # Привязка Enter
         password_input.bind("<Return>", lambda e: do_login())
         password_input.focus_set()

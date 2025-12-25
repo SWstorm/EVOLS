@@ -1,6 +1,174 @@
 import customtkinter as ctk
 from tkinter import messagebox
-from utils.design_system import DesignSystem, UIComponents
+import random
+import string
+import re
+
+
+# === СОВРЕМЕННАЯ СИСТЕМА ДИЗАЙНА (единая с main_window) ===
+class ModernDesign:
+    """Крутая система дизайна"""
+
+    # Цвета
+    PRIMARY = "#2962FF"
+    PRIMARY_DARK = "#0039CB"
+    SECONDARY = "#00E5FF"
+    SUCCESS = "#00E676"
+    DANGER = "#FF1744"
+    WARNING = "#ffba8f"
+
+    # Фон
+    BG_DARK = "#0F172A"
+    BG_CARD = "#1E293B"
+    BG_HOVER = "#334155"
+    SIDEBAR_BG = "#1A1F36"
+
+    # Текст
+    TEXT_PRIMARY = "#F8FAFC"
+    TEXT_SECONDARY = "#94A3B8"
+    TEXT_MUTED = "#64748B"
+
+    @staticmethod
+    def get_title_font():
+        return ("Segoe UI", 28, "bold")
+
+    @staticmethod
+    def get_subtitle_font():
+        return ("Segoe UI", 16)
+
+    @staticmethod
+    def get_body_font():
+        return ("Segoe UI", 12)
+
+    @staticmethod
+    def get_button_font():
+        return ("Segoe UI", 13, "bold")
+
+    @staticmethod
+    def get_caption_font():
+        return ("Segoe UI", 11)
+
+
+class PasswordStrengthIndicator:
+    """Индикатор надёжности пароля"""
+
+    @staticmethod
+    def check_strength(password):
+        """Возвращает оценку и цвет"""
+        if not password:
+            return 0, ModernDesign.TEXT_MUTED, "Введите пароль"
+
+        score = 0
+        feedback = []
+
+        # Длина
+        if len(password) >= 8:
+            score += 25
+        else:
+            feedback.append("минимум 8 символов")
+
+        if len(password) >= 12:
+            score += 15
+
+        # Разнообразие символов
+        if re.search(r'[a-z]', password):
+            score += 15
+        else:
+            feedback.append("строчные буквы")
+
+        if re.search(r'[A-Z]', password):
+            score += 15
+        else:
+            feedback.append("заглавные буквы")
+
+        if re.search(r'\d', password):
+            score += 15
+        else:
+            feedback.append("цифры")
+
+        if re.search(r'[!@#$%^&*()_+\-=\[\]{};:\',.<>?]', password):
+            score += 15
+        else:
+            feedback.append("спецсимволы")
+
+        # Определяем уровень
+        if score < 40:
+            color = ModernDesign.DANGER
+            level = "Слабый"
+        elif score < 70:
+            color = ModernDesign.WARNING
+            level = "Средний"
+        else:
+            color = ModernDesign.SUCCESS
+            level = "Сильный"
+
+        hint = f"{level} • Добавьте: {', '.join(feedback[:2])}" if feedback else level
+
+        return score, color, hint
+
+
+class ToastNotification:
+    """Красивые toast-уведомления"""
+
+    @staticmethod
+    def show(parent, message, type="info", duration=3000):
+        try:
+            if not parent.winfo_exists():
+                return
+        except:
+            return
+
+        toast = ctk.CTkFrame(
+            parent,
+            fg_color=ModernDesign.BG_CARD,
+            corner_radius=12,
+            border_width=2
+        )
+
+        border_colors = {
+            "info": ModernDesign.PRIMARY,
+            "success": ModernDesign.SUCCESS,
+            "error": ModernDesign.DANGER,
+            "warning": ModernDesign.WARNING
+        }
+        toast.configure(border_color=border_colors.get(type, ModernDesign.PRIMARY))
+
+        icons = {
+            "info": "ℹ️",
+            "success": "✓",
+            "error": "✕",
+            "warning": "⚠️"
+        }
+
+        content_frame = ctk.CTkFrame(toast, fg_color="transparent")
+        content_frame.pack(padx=20, pady=15, fill="both", expand=True)
+
+        ctk.CTkLabel(
+            content_frame,
+            text=icons.get(type, "ℹ️"),
+            font=("Segoe UI", 20),
+            text_color=border_colors.get(type, ModernDesign.PRIMARY)
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(
+            content_frame,
+            text=message,
+            font=ModernDesign.get_body_font(),
+            text_color=ModernDesign.TEXT_PRIMARY,
+            wraplength=300
+        ).pack(side="left", fill="both", expand=True)
+
+        toast.place(relx=0.5, rely=0.1, anchor="n")
+        toast.lift()
+
+        def fade_out():
+            try:
+                if toast.winfo_exists():
+                    toast.destroy()
+            except:
+                pass
+
+        parent.after(duration, fade_out)
 
 
 class AddPasswordWindow:
@@ -12,9 +180,10 @@ class AddPasswordWindow:
 
         # Создаем окно
         self.window = ctk.CTkToplevel(parent)
-        self.window.title("Добавить новый пароль")
-        self.window.geometry("550x650")
-        self.window.minsize(500, 600)
+        self.window.title("➕ Добавить пароль")
+        self.window.geometry("600x750")
+        self.window.minsize(550, 700)
+        self.window.configure(fg_color=ModernDesign.BG_DARK)
 
         # Настройка адаптивности
         self.window.grid_columnconfigure(0, weight=1)
@@ -23,9 +192,6 @@ class AddPasswordWindow:
         # Модальное окно
         self.window.transient(parent)
         self.window.grab_set()
-
-        # Применяем тему
-        DesignSystem.setup_theme(self.window)
 
         # Центрируем окно
         self.center_window()
@@ -37,11 +203,9 @@ class AddPasswordWindow:
         """Центрирует окно относительно родительского окна."""
         self.window.update_idletasks()
 
-        # Получаем размеры окна
         width = self.window.winfo_width()
         height = self.window.winfo_height()
 
-        # Центрируем относительно родительского окна
         try:
             parent_x = self.parent.winfo_x()
             parent_y = self.parent.winfo_y()
@@ -51,330 +215,453 @@ class AddPasswordWindow:
             x = parent_x + (parent_width // 2) - (width // 2)
             y = parent_y + (parent_height // 2) - (height // 2)
         except:
-            # Если не получается, центрируем относительно экрана
             x = (self.window.winfo_screenwidth() // 2) - (width // 2)
             y = (self.window.winfo_screenheight() // 2) - (height // 2)
 
         self.window.geometry(f'{width}x{height}+{x}+{y}')
 
     def setup_ui(self):
-        """Создает интерфейс окна добавления пароля."""
+        """Создает современный интерфейс окна"""
         # Основной скроллируемый контейнер
-        scroll_frame = ctk.CTkScrollableFrame(self.window)
-        scroll_frame.grid(row=0, column=0, sticky="nsew", padx=DesignSystem.SPACE_4,
-                          pady=DesignSystem.SPACE_4)
+        scroll_frame = ctk.CTkScrollableFrame(
+            self.window,
+            fg_color="transparent"
+        )
+        scroll_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         scroll_frame.grid_columnconfigure(0, weight=1)
 
-        # Основной контейнер для формы
-        main_container = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-        main_container.grid(row=0, column=0, sticky="ew", padx=DesignSystem.SPACE_6,
-                            pady=DesignSystem.SPACE_6)
-        main_container.grid_columnconfigure(0, weight=1)
+        # === ЗАГОЛОВОК ===
+        header_frame = ctk.CTkFrame(scroll_frame, fg_color=ModernDesign.BG_CARD, corner_radius=15)
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
 
-        # Заголовок
-        header_frame = ctk.CTkFrame(main_container, fg_color="transparent")
-        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, DesignSystem.SPACE_8))
-        header_frame.grid_columnconfigure(0, weight=1)
+        header_content = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_content.pack(padx=25, pady=20)
 
-        title_label = UIComponents.create_section_title(header_frame, "Добавить новый пароль")
-        title_label.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            header_content,
+            text="➕",
+            font=("Segoe UI", 48)
+        ).pack(pady=(0, 10))
 
-        subtitle_label = UIComponents.create_subtitle(header_frame, "Заполните информацию о новой записи")
-        subtitle_label.grid(row=1, column=0, sticky="w", pady=(DesignSystem.SPACE_1, 0))
+        ctk.CTkLabel(
+            header_content,
+            text="Добавить новый пароль",
+            font=("Segoe UI", 24, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY
+        ).pack()
 
-        # Форма с полями
-        form_frame = ctk.CTkFrame(main_container)
-        form_frame.grid(row=1, column=0, sticky="ew", pady=(0, DesignSystem.SPACE_6))
-        form_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            header_content,
+            text="Заполните информацию о новой записи",
+            font=("Segoe UI", 12),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack(pady=(5, 0))
 
-        # Создаем переменные для полей
+        # === ФОРМА ===
+        # Переменные для полей
         self.title_var = ctk.StringVar()
         self.username_var = ctk.StringVar()
         self.password_var = ctk.StringVar()
         self.url_var = ctk.StringVar()
         self.category_var = ctk.StringVar()
-        self.notes_var = ctk.StringVar()
 
-        # Список полей формы
-        fields = [
-            {
-                "label": "Название*",
-                "var": self.title_var,
-                "placeholder": "Например: Gmail, Facebook, Банк",
-                "required": True
-            },
-            {
-                "label": "Имя пользователя/Email",
-                "var": self.username_var,
-                "placeholder": "username@example.com"
-            },
-            {
-                "label": "Пароль*",
-                "var": self.password_var,
-                "placeholder": "Введите пароль",
-                "is_password": True,
-                "required": True
-            },
-            {
-                "label": "URL веб-сайта",
-                "var": self.url_var,
-                "placeholder": "https://example.com"
-            },
-            {
-                "label": "Категория",
-                "var": self.category_var,
-                "placeholder": "Социальные сети, Работа, Банки...",
-                "is_combobox": True
-            }
-        ]
+        # Индикатор надежности
+        self.strength_label = ctk.CTkLabel(
+            scroll_frame,
+            text="",
+            font=ModernDesign.get_caption_font(),
+            text_color=ModernDesign.TEXT_MUTED
+        )
 
-        # Создаем поля формы
-        for i, field in enumerate(fields):
-            # Контейнер для каждого поля
-            field_container = ctk.CTkFrame(form_frame, fg_color="transparent")
-            field_container.grid(row=i, column=0, sticky="ew", pady=DesignSystem.SPACE_3)
-            field_container.grid_columnconfigure(1, weight=1)
+        self.strength_bar = ctk.CTkProgressBar(
+            scroll_frame,
+            width=400,
+            height=8,
+            progress_color=ModernDesign.TEXT_MUTED
+        )
 
-            # Метка поля
-            label_text = field["label"]
-            label = ctk.CTkLabel(
-                field_container,
-                text=label_text,
-                font=DesignSystem.get_button_font(),
-                anchor="w"
-            )
-            label.grid(row=0, column=0, sticky="nw", padx=(DesignSystem.SPACE_4, DesignSystem.SPACE_2),
-                       pady=(DesignSystem.SPACE_2, 0))
+        # 1. Название
+        self._create_field(
+            scroll_frame, 1,
+            "🏷️Название*",
+            self.title_var,
+            "Например: Gmail, Facebook, Банк"
+        )
 
-            # Создаем поле ввода
-            if field.get("is_combobox"):
-                # Выпадающий список для категорий
-                categories = [
-                    "Социальные сети", "Работа", "Банки", "Покупки",
-                    "Развлечения", "Образование", "Здоровье", "Другое"
-                ]
-                entry = ctk.CTkComboBox(
-                    field_container,
-                    variable=field["var"],
-                    values=categories,
-                    width=350,
-                    height=DesignSystem.INPUT_HEIGHT,
-                    font=DesignSystem.get_body_font()
-                )
-                entry.set("")  # Пустое значение по умолчанию
-            else:
-                # Обычное поле ввода
-                show_char = "*" if field.get("is_password") else None
-                entry = UIComponents.create_input_field(
-                    field_container,
-                    placeholder=field["placeholder"],
-                    width=350,
-                    show=show_char
-                )
-                entry.configure(textvariable=field["var"])
+        # 2. Логин
+        self._create_field(
+            scroll_frame, 2,
+            "👤 Логин/Email",
+            self.username_var,
+            "username@example.com"
+        )
 
-            entry.grid(row=1, column=0, columnspan=2, sticky="ew",
-                       padx=DesignSystem.SPACE_4, pady=(DesignSystem.SPACE_1, 0))
+        # 3. Пароль (с кнопками)
+        password_card = self._create_password_field(scroll_frame, 3)
 
-            # Кнопка показать/скрыть для пароля и кнопка генерации
-            if field.get("is_password"):
-                button_container = ctk.CTkFrame(field_container, fg_color="transparent")
-                button_container.grid(row=2, column=0, columnspan=2, sticky="ew",
-                                      padx=DesignSystem.SPACE_4, pady=(DesignSystem.SPACE_2, 0))
+        # 4. URL
+        self._create_field(
+            scroll_frame, 4,
+            "🌐 URL веб-сайта",
+            self.url_var,
+            "https://example.com"
+        )
 
-                def toggle_password():
-                    if entry.cget('show') == '*':
-                        entry.configure(show='')
-                        show_button.configure(text="Скрыть")
-                    else:
-                        entry.configure(show='*')
-                        show_button.configure(text="Показать")
+        # 5. Категория
+        self._create_category_field(scroll_frame, 5)
 
-                show_button = ctk.CTkButton(
-                    button_container,
-                    text="Показать",
-                    command=toggle_password,
-                    width=80,
-                    height=30,
-                    font=DesignSystem.get_caption_font()
-                )
-                show_button.grid(row=0, column=0, sticky="w")
+        # 6. Заметки
+        self._create_notes_field(scroll_frame, 6)
 
-                generate_button = ctk.CTkButton(
-                    button_container,
-                    text="Сгенерировать",
-                    command=self.generate_password,
-                    width=120,
-                    height=30,
-                    font=DesignSystem.get_caption_font(),
-                    fg_color=DesignSystem.SUCCESS,
-                    hover_color=DesignSystem.SUCCESS_HOVER
-                )
-                generate_button.grid(row=0, column=1, sticky="w", padx=(DesignSystem.SPACE_2, 0))
+        # === ИНФОРМАЦИЯ ===
+        info_frame = ctk.CTkFrame(scroll_frame, fg_color=ModernDesign.BG_HOVER, corner_radius=10)
+        info_frame.grid(row=7, column=0, sticky="ew", pady=(10, 20))
 
-        # Поле для заметок (отдельно, так как это текстовое поле)
-        notes_container = ctk.CTkFrame(form_frame, fg_color="transparent")
-        notes_container.grid(row=len(fields), column=0, sticky="ew", pady=DesignSystem.SPACE_3)
-        notes_container.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            info_frame,
+            text="ℹ️ * Обязательные поля для заполнения",
+            font=ModernDesign.get_caption_font(),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack(padx=15, pady=10)
 
-        notes_label = ctk.CTkLabel(
-            notes_container,
-            text="Заметки",
-            font=DesignSystem.get_button_font(),
+        # === КНОПКИ ===
+        buttons_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        buttons_frame.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        buttons_frame.grid_columnconfigure((0, 1), weight=1)
+
+        save_btn = ctk.CTkButton(
+            buttons_frame,
+            text="💾 Сохранить",
+            command=self.save_password,
+            font=("Segoe UI", 14, "bold"),
+            height=50,
+            fg_color=ModernDesign.SUCCESS,
+            hover_color="#00C853",
+            corner_radius=10
+        )
+        save_btn.grid(row=0, column=0, padx=5, sticky="ew")
+
+        cancel_btn = ctk.CTkButton(
+            buttons_frame,
+            text="✕ Отмена",
+            command=self.window.destroy,
+            font=("Segoe UI", 14, "bold"),
+            height=50,
+            fg_color=ModernDesign.BG_HOVER,
+            hover_color="#475569",
+            corner_radius=10
+        )
+        cancel_btn.grid(row=0, column=1, padx=5, sticky="ew")
+
+    def _create_field(self, parent, row, label, variable, placeholder):
+        """Создаёт обычное поле ввода"""
+        field_card = ctk.CTkFrame(parent, fg_color=ModernDesign.BG_CARD, corner_radius=12)
+        field_card.grid(row=row, column=0, sticky="ew", pady=5)
+
+        field_content = ctk.CTkFrame(field_card, fg_color="transparent")
+        field_content.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            field_content,
+            text=label,
+            font=("Segoe UI", 12, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 8))
+
+        entry = ctk.CTkEntry(
+            field_content,
+            textvariable=variable,
+            placeholder_text=placeholder,
+            height=45,
+            font=("Segoe UI", 13),
+            border_width=0,
+            fg_color=ModernDesign.BG_HOVER,
+            corner_radius=8
+        )
+        entry.pack(fill="x")
+
+        return entry
+
+    def _create_password_field(self, parent, row):
+        field_card = ctk.CTkFrame(parent, fg_color=ModernDesign.BG_CARD, corner_radius=12)
+        field_card.grid(row=row, column=0, sticky="ew", pady=5)
+
+        field_content = ctk.CTkFrame(field_card, fg_color="transparent")
+        field_content.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            field_content,
+            text="🔑 Пароль*",
+            font=("Segoe UI", 12, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 8))
+
+        # Поле ввода + кнопка показать
+        entry_container = ctk.CTkFrame(field_content, fg_color="transparent")
+        entry_container.pack(fill="x")
+        entry_container.grid_columnconfigure(0, weight=1)
+
+        password_entry = ctk.CTkEntry(
+            entry_container,
+            textvariable=self.password_var,
+            placeholder_text="Введите надёжный пароль",
+            show="●",
+            height=45,
+            font=("Segoe UI", 13),
+            border_width=0,
+            fg_color=ModernDesign.BG_HOVER,
+            corner_radius=8
+        )
+        password_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        
+        show_btn = ctk.CTkButton(
+            entry_container,
+            text="",
+            width=50,
+            height=45,
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        show_btn.grid(row=0, column=1)
+
+        eye_icon = ctk.CTkLabel(
+            show_btn,
+            text="👁️",
+            font=("Segoe UI Emoji", 22),
+            text_color="white",
+            fg_color="transparent",
+            cursor="hand2"
+        )
+        eye_icon.place(relx=0.5, rely=0.48, anchor="center")
+
+        def on_press(e):
+            password_entry.configure(show='')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY_DARK)
+            eye_icon.configure(text="👁")
+
+        def on_release(e):
+            password_entry.configure(show='●')
+            show_btn.configure(fg_color=ModernDesign.PRIMARY)
+            eye_icon.configure(text="👁️")
+
+        show_btn.bind("<ButtonPress-1>", on_press)
+        show_btn.bind("<ButtonRelease-1>", on_release)
+        eye_icon.bind("<ButtonPress-1>", on_press)
+        eye_icon.bind("<ButtonRelease-1>", on_release)
+
+        # === ИНДИКАТОР СВЕРХУ (появляется при вводе) ===
+        strength_container = ctk.CTkFrame(field_content, fg_color="transparent")
+        
+        self.strength_bar = ctk.CTkProgressBar(
+            strength_container,
+            height=4,
+            progress_color=ModernDesign.TEXT_MUTED
+        )
+        self.strength_bar.pack(fill="x", pady=(8, 6))
+        self.strength_bar.set(0)
+
+        self.strength_label = ctk.CTkLabel(
+            strength_container,
+            text="",
+            font=("Segoe UI", 10),
+            text_color=ModernDesign.TEXT_SECONDARY,
             anchor="w"
         )
-        notes_label.grid(row=0, column=0, sticky="w", padx=DesignSystem.SPACE_4,
-                         pady=(DesignSystem.SPACE_2, 0))
+        self.strength_label.pack(anchor="w")
+
+        self.strength_visible = False
+
+        def on_password_change(*args):
+            password = self.password_var.get()
+            
+            if not password:
+                if self.strength_visible:
+                    strength_container.pack_forget()
+                    self.strength_visible = False
+                return
+
+            if not self.strength_visible:
+                strength_container.pack(fill="x", pady=(8, 0))
+                self.strength_visible = True
+
+            score, color, hint = PasswordStrengthIndicator.check_strength(password)
+            
+            self.strength_bar.set(score / 100)
+            self.strength_bar.configure(progress_color=color)
+            
+            if score < 40:
+                level = "Слабый"
+                emoji = "🔴"
+            elif score < 70:
+                level = "Средний"
+                emoji = "🟡"
+            else:
+                level = "Сильный"
+                emoji = "🟢"
+            
+            length = len(password)
+            has_lower = bool(re.search(r'[a-z]', password))
+            has_upper = bool(re.search(r'[A-Z]', password))
+            has_digit = bool(re.search(r'\d', password))
+            has_special = bool(re.search(r'[!@#$%^&*()_+\-=\[\]{};:\',.<>?]', password))
+            
+            missing = []
+            if length < 12: missing.append("длина")
+            if not has_lower: missing.append("a-z")
+            if not has_upper: missing.append("A-Z")
+            if not has_digit: missing.append("0-9")
+            if not has_special: missing.append("!@#")
+            
+            if missing:
+                hint_text = f"Добавьте: {', '.join(missing)}"
+            else:
+                hint_text = "Отличный пароль!"
+            
+            self.strength_label.configure(
+                text=f"{emoji} {level} • {hint_text}",
+                text_color=color
+            )
+
+        self.password_var.trace("w", on_password_change)
+
+        # === КНОПКА ГЕНЕРАЦИИ СНИЗУ ===
+        buttons_container = ctk.CTkFrame(field_content, fg_color="transparent")
+        buttons_container.pack(fill="x", pady=(10, 0))
+
+        generate_btn = ctk.CTkButton(
+            buttons_container,
+            text="🎲 Сгенерировать надежный пароль",
+            command=self.generate_password,
+            font=("Segoe UI", 12, "bold"),
+            height=40,
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        generate_btn.pack(fill="x")
+
+        return field_card
+
+
+
+
+    def _create_category_field(self, parent, row):
+        """Создаёт поле выбора категории"""
+        field_card = ctk.CTkFrame(parent, fg_color=ModernDesign.BG_CARD, corner_radius=12)
+        field_card.grid(row=row, column=0, sticky="ew", pady=5)
+
+        field_content = ctk.CTkFrame(field_card, fg_color="transparent")
+        field_content.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            field_content,
+            text="📁 Категория",
+            font=("Segoe UI", 12, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 8))
+
+        categories = [
+            "Работа",
+            "Личное",
+            "Финансы",
+            "Соцсети",
+            "Email",
+            "Другое"
+        ]
+
+        category_combo = ctk.CTkComboBox(
+            field_content,
+            variable=self.category_var,
+            values=categories,
+            height=45,
+            font=("Segoe UI", 13),
+            border_width=0,
+            fg_color=ModernDesign.BG_HOVER,
+            button_color=ModernDesign.PRIMARY,
+            button_hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        category_combo.pack(fill="x")
+        category_combo.set("")
+
+        return field_card
+
+    def _create_notes_field(self, parent, row):
+        """Создаёт поле для заметок"""
+        field_card = ctk.CTkFrame(parent, fg_color=ModernDesign.BG_CARD, corner_radius=12)
+        field_card.grid(row=row, column=0, sticky="ew", pady=5)
+
+        field_content = ctk.CTkFrame(field_card, fg_color="transparent")
+        field_content.pack(fill="x", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            field_content,
+            text="📝 Заметки",
+            font=("Segoe UI", 12, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 8))
 
         self.notes_textbox = ctk.CTkTextbox(
-            notes_container,
-            width=350,
-            height=80,
-            font=DesignSystem.get_body_font()
+            field_content,
+            height=100,
+            font=("Segoe UI", 12),
+            fg_color=ModernDesign.BG_HOVER,
+            corner_radius=8
         )
-        self.notes_textbox.grid(row=1, column=0, sticky="ew", padx=DesignSystem.SPACE_4,
-                                pady=(DesignSystem.SPACE_1, 0))
+        self.notes_textbox.pack(fill="x")
 
-        # Информационное сообщение
-        info_frame = ctk.CTkFrame(main_container, fg_color=DesignSystem.GRAY_100)
-        info_frame.grid(row=2, column=0, sticky="ew", pady=(0, DesignSystem.SPACE_6))
-
-        info_label = ctk.CTkLabel(
-            info_frame,
-            text="* Обязательные поля для заполнения",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600
-        )
-        info_label.grid(row=0, column=0, padx=DesignSystem.SPACE_4, pady=DesignSystem.SPACE_3)
-
-        # Нижняя панель с кнопками (вне скролла)
-        bottom_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        bottom_frame.grid(row=1, column=0, sticky="ew", pady=DesignSystem.SPACE_4)
-        bottom_frame.grid_columnconfigure((0, 1, 2), weight=1)
-
-        # Кнопки действий
-        save_button = UIComponents.create_primary_button(
-            bottom_frame,
-            "Сохранить",
-            command=self.save_password,
-            width=120
-        )
-        save_button.grid(row=0, column=0, padx=DesignSystem.SPACE_2)
-
-        test_button = ctk.CTkButton(
-            bottom_frame,
-            text="Проверить пароль",
-            command=self.test_password_strength,
-            width=140,
-            font=DesignSystem.get_button_font(),
-            fg_color=DesignSystem.WARNING,
-            hover_color=DesignSystem.WARNING_HOVER
-        )
-        test_button.grid(row=0, column=1, padx=DesignSystem.SPACE_2)
-
-        cancel_button = UIComponents.create_secondary_button(
-            bottom_frame,
-            "Отмена",
-            command=self.window.destroy,
-            width=100
-        )
-        cancel_button.grid(row=0, column=2, padx=DesignSystem.SPACE_2)
-
-        # Устанавливаем фокус на первое поле
-        fields[0]["var"] and self.window.after(100, lambda: self.focus_first_field())
-
-    def focus_first_field(self):
-        """Устанавливает фокус на первое поле формы."""
-        try:
-            # Находим первое поле ввода и устанавливаем на него фокус
-            for widget in self.window.winfo_children():
-                if isinstance(widget, ctk.CTkScrollableFrame):
-                    for child in widget.winfo_children():
-                        if isinstance(child, ctk.CTkEntry):
-                            child.focus_set()
-                            return
-        except:
-            pass
+        return field_card
 
     def generate_password(self):
-        """Генерирует случайный пароль."""
-        import random
-        import string
-
-        # Параметры генерации
+        """Генерирует случайный пароль"""
         length = 16
-        chars = string.ascii_letters + string.digits + "!@#$%^&*"
+        chars = string.ascii_letters + string.digits + "!@#$%^&*()_+-="
 
-        # Генерируем пароль
         password = ''.join(random.choice(chars) for _ in range(length))
-
-        # Устанавливаем в поле
         self.password_var.set(password)
 
-        # Показываем уведомление
-        messagebox.showinfo("Генератор паролей", f"Сгенерирован пароль длиной {length} символов")
+        ToastNotification.show(self.window, f"Сгенерирован пароль ({length} символов)", "success")
 
     def test_password_strength(self):
-        """Проверяет надежность введенного пароля."""
+        """Проверяет надежность пароля"""
         password = self.password_var.get()
 
         if not password:
-            messagebox.showwarning("Предупреждение", "Сначала введите пароль для проверки")
+            ToastNotification.show(self.window, "Сначала введите пароль", "warning")
             return
 
-        # Простая проверка надежности
-        score = 0
+        score, color, hint = PasswordStrengthIndicator.check_strength(password)
+
+        # Детальное сообщение
         feedback = []
+        if len(password) < 8:
+            feedback.append("• Увеличьте длину до 8+ символов")
+        if not re.search(r'[a-z]', password):
+            feedback.append("• Добавьте строчные буквы (a-z)")
+        if not re.search(r'[A-Z]', password):
+            feedback.append("• Добавьте заглавные буквы (A-Z)")
+        if not re.search(r'\d', password):
+            feedback.append("• Добавьте цифры (0-9)")
+        if not re.search(r'[!@#$%^&*()_+\-=\[\]{};:\',.<>?]', password):
+            feedback.append("• Добавьте спецсимволы (!@#$%...)")
 
-        if len(password) >= 8:
-            score += 25
-        else:
-            feedback.append("Увеличьте длину до 8+ символов")
+        level = "Отличный" if score >= 80 else "Хороший" if score >= 60 else "Средний" if score >= 40 else "Слабый"
 
-        if any(c.islower() for c in password):
-            score += 15
-        else:
-            feedback.append("Добавьте строчные буквы")
-
-        if any(c.isupper() for c in password):
-            score += 15
-        else:
-            feedback.append("Добавьте заглавные буквы")
-
-        if any(c.isdigit() for c in password):
-            score += 15
-        else:
-            feedback.append("Добавьте цифры")
-
-        if any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-            score += 30
-        else:
-            feedback.append("Добавьте специальные символы")
-
-        # Определяем уровень
-        if score >= 80:
-            level = "Отличный"
-            color = "зеленый"
-        elif score >= 60:
-            level = "Хороший"
-            color = "желтый"
-        elif score >= 40:
-            level = "Средний"
-            color = "оранжевый"
-        else:
-            level = "Слабый"
-            color = "красный"
-
-        # Формируем сообщение
-        message = f"Уровень надежности: {level} ({score}/100)\n"
+        message = f"Уровень: {level} ({score}/100)\n"
         if feedback:
-            message += "\nРекомендации:\n• " + "\n• ".join(feedback)
+            message += "\nРекомендации:\n" + "\n".join(feedback)
+        else:
+            message += "\n✓ Пароль надёжный!"
 
         messagebox.showinfo("Проверка пароля", message)
 
     def save_password(self):
-        """Сохраняет пароль в базу данных."""
-        # Получаем значения полей
+        """Сохраняет пароль в БД"""
         title = self.title_var.get().strip()
         username = self.username_var.get().strip()
         password = self.password_var.get()
@@ -382,17 +669,17 @@ class AddPasswordWindow:
         category = self.category_var.get().strip()
         notes = self.notes_textbox.get("1.0", "end-1c").strip()
 
-        # Проверяем обязательные поля
+        # Валидация
         if not title:
-            messagebox.showerror("Ошибка", "Название записи обязательно для заполнения!")
+            ToastNotification.show(self.window, "Введите название записи!", "error")
             return
 
         if not password:
-            messagebox.showerror("Ошибка", "Пароль обязателен для заполнения!")
+            ToastNotification.show(self.window, "Введите пароль!", "error")
             return
 
         try:
-            # Сохраняем в базу данных
+            # Сохраняем
             password_id = self.db.add_password(
                 title=title,
                 username=username,
@@ -402,31 +689,18 @@ class AddPasswordWindow:
                 notes=notes
             )
 
-            # Показываем сообщение об успехе
-            messagebox.showinfo("Успех", f"Пароль '{title}' успешно сохранен!")
+            ToastNotification.show(self.window, f"Пароль '{title}' сохранён!", "success")
 
             # Обновляем главное окно
+            if hasattr(self.main_window, 'invalidate_cache'):
+                self.main_window.invalidate_cache()
+            if hasattr(self.main_window, 'update_header_stats'):
+                self.main_window.update_header_stats()
             if hasattr(self.main_window, 'load_passwords'):
                 self.main_window.load_passwords()
 
-            # Закрываем окно
-            self.window.destroy()
+            # Закрываем через 500ms чтобы увидеть toast
+            self.window.after(500, self.window.destroy)
 
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить пароль: {e}")
-
-    def validate_url(self, url):
-        """Проверяет корректность URL."""
-        if not url:
-            return True
-
-        import re
-        url_pattern = re.compile(
-            r'^https?://'  # http:// или https://
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # домен
-            r'localhost|'  # localhost
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP
-            r'(?::\d+)?'  # порт
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-
-        return url_pattern.match(url) is not None
+            ToastNotification.show(self.window, f"Ошибка: {e}", "error")

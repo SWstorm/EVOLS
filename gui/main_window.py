@@ -963,8 +963,8 @@ class MainWindow:
     def _open_add_password_window(self):
         try:
             from gui.add_password import AddPasswordWindow
-            if self.add_password_window and self.add_password_window.winfo_exists():
-                self.add_password_window.focus()
+            if self.add_password_window and self.add_password_window.window.winfo_exists():
+                self.add_password_window.window.focus()
             else:
                 self.add_password_window = AddPasswordWindow(self.root, self.db, self.encryptor, self)
                 self.invalidate_cache()
@@ -978,8 +978,8 @@ class MainWindow:
     def _open_settings_window(self):
         try:
             from gui.settings import SettingsWindow
-            if self.settings_window and self.settings_window.winfo_exists():
-                self.settings_window.focus()
+            if self.settings_window and self.settings_window.window.winfo_exists():
+                self.settings_window.window.focus()
             else:
                 self.settings_window = SettingsWindow(self.root, self.db, self.encryptor, self)
         except Exception as e:
