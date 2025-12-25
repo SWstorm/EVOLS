@@ -1,1273 +1,747 @@
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox
 import os
-import shutil
-from utils.design_system import DesignSystem, ThemeManager
+import re
 
-# Условный импорт для 2FA
-try:
-    import pyotp
-    import qrcode
-    from PIL import Image
+# === СОВРЕМЕННАЯ СИСТЕМА ДИЗАЙНА (единая с main_window) ===
+class ModernDesign:
+    """Крутая система дизайна"""
 
-    HAS_2FA_SUPPORT = True
-except ImportError:
-    HAS_2FA_SUPPORT = False
+    # Цвета
+    PRIMARY = "#2962FF"
+    PRIMARY_DARK = "#0039CB"
+    SECONDARY = "#00E5FF"
+    SUCCESS = "#00E676"
+    DANGER = "#FF1744"
+    WARNING = "#FFD600"
+
+    # Фон
+    BG_DARK = "#0F172A"
+    BG_CARD = "#1E293B"
+    BG_HOVER = "#334155"
+    SIDEBAR_BG = "#1A1F36"
+
+    # Текст
+    TEXT_PRIMARY = "#F8FAFC"
+    TEXT_SECONDARY = "#94A3B8"
+    TEXT_MUTED = "#64748B"
+
+    @staticmethod
+    def get_title_font():
+        return ("Segoe UI", 32, "bold")
+
+    @staticmethod
+    def get_subtitle_font():
+        return ("Segoe UI", 16)
+
+    @staticmethod
+    def get_body_font():
+        return ("Segoe UI", 13)
+
+    @staticmethod
+    def get_button_font():
+        return ("Segoe UI", 14, "bold")
+
+    @staticmethod
+    def get_caption_font():
+        return ("Segoe UI", 11)
 
 
-class SettingsWindow:
-    def __init__(self, parent, db, encryptor, main_window):
-        self.parent = parent
-        self.db = db
-        self.encryptor = encryptor
-        self.main_window = main_window
+class PasswordStrengthIndicator:
+    """Индикатор надёжности пароля в реальном времени"""
 
-        # Инициализация переменных настроек (используем StringVar для безопасности)
-        self.auto_lock_var = ctk.StringVar(value="5")
-        self.backup_dir_var = ctk.StringVar(value=os.path.join(os.path.dirname(os.path.dirname(__file__)), "backups"))
-        self.auto_backup_var = ctk.BooleanVar(value=True)
+    @staticmethod
+    def check_strength(password):
+        """Возвращает оценку и цвет"""
+        if not password:
+            return 0, ModernDesign.TEXT_MUTED, "Введите пароль"
 
-        # Загрузка текущих настроек
-        self.load_current_settings()
+        score = 0
+        feedback = []
 
-        # Создание окна
-        self.window = ctk.CTkToplevel(parent)
-        self.window.title("Настройки")
-        self.window.geometry("600x500")
-        self.window.minsize(500, 400)
-
-        # Настройка адаптивности
-        self.window.grid_columnconfigure(0, weight=1)
-        self.window.grid_rowconfigure(0, weight=1)
-
-        # Центрирование окна
-        self.window.transient(parent)
-        self.window.grab_set()
-
-        # Создание интерфейса
-        self.setup_ui()
-
-    def load_current_settings(self):
-        """Загружает текущие настройки из файла"""
-        try:
-            import json
-            if os.path.exists("app_settings.json"):
-                with open("app_settings.json", "r", encoding="utf-8") as f:
-                    settings = json.load(f)
-                    self.auto_lock_var.set(str(settings.get("auto_lock_time", 5)))
-                    self.backup_dir_var.set(settings.get("backup_directory",
-                                                         os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                                                      "backups")))
-                    self.auto_backup_var.set(settings.get("auto_backup", True))
-        except Exception as e:
-            print(f"Ошибка при загрузке настроек: {e}")
-
-    def validate_integer_input(self, value):
-        """Проверяет, что введенное значение является целым числом"""
-        if value == "":
-            return True  # Разрешаем пустое поле
-        try:
-            int(value)
-            return True
-        except ValueError:
-            return False
-
-    def setup_ui(self):
-        # Основной контейнер с отступами
-        main_frame = ctk.CTkFrame(self.window)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_rowconfigure(0, weight=1)
-
-        # Создаем вкладки
-        tabview = ctk.CTkTabview(main_frame)
-        tabview.grid(row=0, column=0, sticky="nsew")
-
-        # Добавляем вкладки
-        tab_general = tabview.add("Общие")
-        tab_security = tabview.add("Безопасность")
-        tab_backup = tabview.add("Резервное копирование")
-
-        # Настраиваем вкладки
-        for tab in [tab_general, tab_security, tab_backup]:
-            tab.grid_columnconfigure(0, weight=1)
-
-        # ==== Вкладка общих настроек ====
-        # Современный заголовок с иконкой и разделителем
-        general_header_frame = ctk.CTkFrame(tab_general, fg_color="transparent")
-        general_header_frame.grid(row=0, column=0, sticky="ew", pady=(15, 25))
-        general_header_frame.grid_columnconfigure(1, weight=1)
-
-        # Иконка
-        ctk.CTkLabel(
-            general_header_frame,
-            text="⚙️",
-            font=("Arial", 28)
-        ).grid(row=0, column=0, padx=(0, 10))
-
-        # Заголовок и подзаголовок
-        title_container = ctk.CTkFrame(general_header_frame, fg_color="transparent")
-        title_container.grid(row=0, column=1, sticky="ew")
-        title_container.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            title_container,
-            text="Общие настройки",
-            font=DesignSystem.get_title_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="ew")
-
-        ctk.CTkLabel(
-            title_container,
-            text="Основные параметры работы приложения",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
-
-        # Разделительная линия
-        separator1 = ctk.CTkFrame(tab_general, height=2, fg_color=DesignSystem.GRAY_200)
-        separator1.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
-
-        # Карточка настроек
-        settings_card = ctk.CTkFrame(tab_general)
-        settings_card.grid(row=2, column=0, sticky="ew", padx=20, pady=10)
-        settings_card.grid_columnconfigure(0, weight=1)
-
-        # Автоматическая блокировка внутри карточки
-        auto_lock_section = ctk.CTkFrame(settings_card, fg_color="transparent")
-        auto_lock_section.grid(row=0, column=0, sticky="ew", padx=15, pady=15)
-        auto_lock_section.grid_columnconfigure(0, weight=1)
-
-        # Подзаголовок секции
-        ctk.CTkLabel(
-            auto_lock_section,
-            text="🔒 Автоматическая блокировка",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
-
-        # Поля ввода
-        auto_lock_input_frame = ctk.CTkFrame(auto_lock_section, fg_color="transparent")
-        auto_lock_input_frame.grid(row=1, column=0, sticky="ew")
-        auto_lock_input_frame.grid_columnconfigure(2, weight=1)
-
-        ctk.CTkLabel(
-            auto_lock_input_frame,
-            text="Блокировать через:",
-            font=DesignSystem.get_body_font()
-        ).grid(row=0, column=0, padx=(0, 10), sticky="w")
-
-        # Регистрируем валидацию для поля ввода
-        vcmd = (self.window.register(self.validate_integer_input), '%P')
-
-        auto_lock_entry = ctk.CTkEntry(
-            auto_lock_input_frame,
-            textvariable=self.auto_lock_var,
-            width=60,
-            font=DesignSystem.get_body_font(),
-            validate='key',
-            validatecommand=vcmd
-        )
-        auto_lock_entry.grid(row=0, column=1, padx=5)
-
-        ctk.CTkLabel(
-            auto_lock_input_frame,
-            text="минут",
-            font=DesignSystem.get_body_font()
-        ).grid(row=0, column=2, sticky="w", padx=(5, 0))
-
-        # ==== Вкладка безопасности ====
-        # Современный заголовок безопасности
-        security_header_frame = ctk.CTkFrame(tab_security, fg_color="transparent")
-        security_header_frame.grid(row=0, column=0, sticky="ew", pady=(15, 25))
-        security_header_frame.grid_columnconfigure(1, weight=1)
-
-        # Иконка безопасности
-        ctk.CTkLabel(
-            security_header_frame,
-            text="🛡️",
-            font=("Arial", 28)
-        ).grid(row=0, column=0, padx=(0, 10))
-
-        # Заголовок и подзаголовок
-        security_title_container = ctk.CTkFrame(security_header_frame, fg_color="transparent")
-        security_title_container.grid(row=0, column=1, sticky="ew")
-        security_title_container.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            security_title_container,
-            text="Настройки безопасности",
-            font=DesignSystem.get_title_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="ew")
-
-        ctk.CTkLabel(
-            security_title_container,
-            text="Защита данных и методы аутентификации",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
-
-        # Разделительная линия
-        separator2 = ctk.CTkFrame(tab_security, height=2, fg_color=DesignSystem.GRAY_200)
-        separator2.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
-
-        # Карточки безопасности
-        security_cards_frame = ctk.CTkFrame(tab_security, fg_color="transparent")
-        security_cards_frame.grid(row=2, column=0, sticky="ew", padx=20)
-        security_cards_frame.grid_columnconfigure(0, weight=1)
-
-        # Карточка мастер-пароля
-        master_pwd_card = ctk.CTkFrame(security_cards_frame)
-        master_pwd_card.grid(row=0, column=0, sticky="ew", pady=(0, 15))
-        master_pwd_card.grid_columnconfigure(0, weight=1)
-
-        master_pwd_header = ctk.CTkFrame(master_pwd_card, fg_color="transparent")
-        master_pwd_header.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
-        master_pwd_header.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            master_pwd_header,
-            text="🔑 Мастер-пароль",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w")
-
-        ctk.CTkLabel(
-            master_pwd_header,
-            text="Основной ключ для доступа к хранилищу",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-
-        # Кнопка изменения мастер-пароля
-        ctk.CTkButton(
-            master_pwd_card,
-            text="Изменить мастер-пароль",
-            command=self.change_master_password,
-            font=DesignSystem.get_body_font(),
-            height=40,
-            fg_color=DesignSystem.PRIMARY,
-            hover_color="#1565C0"
-        ).grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
-
-        # Карточка двухфакторной аутентификации
-        twofa_card = ctk.CTkFrame(security_cards_frame)
-        twofa_card.grid(row=1, column=0, sticky="ew", pady=(0, 15))
-        twofa_card.grid_columnconfigure(0, weight=1)
-
-        twofa_header = ctk.CTkFrame(twofa_card, fg_color="transparent")
-        twofa_header.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
-        twofa_header.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            twofa_header,
-            text="📱 Двухфакторная аутентификация",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w")
-
-        status_text = "Активна" if os.path.exists("2fa_secret.key") else "Не настроена"
-        status_color = DesignSystem.SUCCESS if os.path.exists("2fa_secret.key") else DesignSystem.GRAY_600
-
-        ctk.CTkLabel(
-            twofa_header,
-            text=f"Дополнительный уровень защиты • Статус: {status_text}",
-            font=DesignSystem.get_caption_font(),
-            text_color=status_color,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-
-        # Кнопка 2FA
-        if os.path.exists("2fa_secret.key"):
-            ctk.CTkButton(
-                twofa_card,
-                text="Отключить двухфакторную аутентификацию",
-                command=self.disable_2fa,
-                font=DesignSystem.get_body_font(),
-                height=40,
-                fg_color=DesignSystem.DANGER,
-                hover_color="#C62828"
-            ).grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
+        # Длина
+        if len(password) >= 8:
+            score += 25
         else:
-            if HAS_2FA_SUPPORT:
-                ctk.CTkButton(
-                    twofa_card,
-                    text="Настроить двухфакторную аутентификацию",
-                    command=self.setup_2fa,
-                    font=DesignSystem.get_body_font(),
-                    height=40,
-                    fg_color=DesignSystem.SUCCESS,
-                    hover_color="#388E3C"
-                ).grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
-            else:
-                info_label = ctk.CTkLabel(
-                    twofa_card,
-                    text="⚠️ Недоступно (требуется: pip install pyotp qrcode pillow)",
-                    font=DesignSystem.get_body_font(),
-                    text_color=DesignSystem.WARNING,
-                    fg_color=DesignSystem.GRAY_100,
-                    corner_radius=6
-                )
-                info_label.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
+            feedback.append("минимум 8 символов")
 
-        # Карточка анализа паролей
-        analysis_card = ctk.CTkFrame(security_cards_frame)
-        analysis_card.grid(row=2, column=0, sticky="ew")
-        analysis_card.grid_columnconfigure(0, weight=1)
+        if len(password) >= 12:
+            score += 15
 
-        analysis_header = ctk.CTkFrame(analysis_card, fg_color="transparent")
-        analysis_header.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
-        analysis_header.grid_columnconfigure(0, weight=1)
+        # Разнообразие символов
+        if re.search(r'[a-z]', password):
+            score += 15
+        else:
+            feedback.append("строчные буквы")
 
-        ctk.CTkLabel(
-            analysis_header,
-            text="📊 Анализ безопасности",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w")
+        if re.search(r'[A-Z]', password):
+            score += 15
+        else:
+            feedback.append("заглавные буквы")
 
-        ctk.CTkLabel(
-            analysis_header,
-            text="Проверка надежности всех сохраненных паролей",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        if re.search(r'\d', password):
+            score += 15
+        else:
+            feedback.append("цифры")
 
-        # Кнопка проверки паролей
-        ctk.CTkButton(
-            analysis_card,
-            text="Проверить все пароли на надежность",
-            command=self.check_all_passwords,
-            font=DesignSystem.get_body_font(),
-            height=40,
-            fg_color=DesignSystem.PRIMARY,
-            hover_color="#1565C0"
-        ).grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
+        if re.search(r'[!@#$%^&*()_+\-=\[\]{};:\',.<>?]', password):
+            score += 15
+        else:
+            feedback.append("спецсимволы")
 
-        # ==== Вкладка резервного копирования ====
-        # Современный заголовок резервного копирования
-        backup_header_frame = ctk.CTkFrame(tab_backup, fg_color="transparent")
-        backup_header_frame.grid(row=0, column=0, sticky="ew", pady=(15, 25))
-        backup_header_frame.grid_columnconfigure(1, weight=1)
+        # Определяем уровень
+        if score < 40:
+            color = ModernDesign.DANGER
+            level = "Слабый"
+        elif score < 70:
+            color = ModernDesign.WARNING
+            level = "Средний"
+        else:
+            color = ModernDesign.SUCCESS
+            level = "Сильный"
 
-        # Иконка резервного копирования
-        ctk.CTkLabel(
-            backup_header_frame,
-            text="💾",
-            font=("Arial", 28)
-        ).grid(row=0, column=0, padx=(0, 10))
+        hint = f"{level} • Добавьте: {', '.join(feedback[:2])}" if feedback else level
 
-        # Заголовок и подзаголовок
-        backup_title_container = ctk.CTkFrame(backup_header_frame, fg_color="transparent")
-        backup_title_container.grid(row=0, column=1, sticky="ew")
-        backup_title_container.grid_columnconfigure(0, weight=1)
+        return score, color, hint
 
-        ctk.CTkLabel(
-            backup_title_container,
-            text="Резервное копирование",
-            font=DesignSystem.get_title_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="ew")
 
-        ctk.CTkLabel(
-            backup_title_container,
-            text="Настройки сохранения и восстановления данных",
-            font=DesignSystem.get_caption_font(),
-            text_color=DesignSystem.GRAY_600,
-            anchor="w"
-        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+class ToastNotification:
+    """Красивые toast-уведомления"""
 
-        # Разделительная линия
-        separator3 = ctk.CTkFrame(tab_backup, height=2, fg_color=DesignSystem.GRAY_200)
-        separator3.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
-
-        # Карточка настроек резервного копирования
-        backup_settings_card = ctk.CTkFrame(tab_backup)
-        backup_settings_card.grid(row=2, column=0, sticky="ew", padx=20)
-        backup_settings_card.grid_columnconfigure(0, weight=1)
-
-        # Секция директории
-        dir_section = ctk.CTkFrame(backup_settings_card, fg_color="transparent")
-        dir_section.grid(row=0, column=0, sticky="ew", padx=15, pady=15)
-        dir_section.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            dir_section,
-            text="📁 Директория для резервных копий",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
-
-        dir_frame = ctk.CTkFrame(dir_section, fg_color="transparent")
-        dir_frame.grid(row=1, column=0, sticky="ew")
-        dir_frame.grid_columnconfigure(0, weight=1)
-
-        backup_dir_entry = ctk.CTkEntry(
-            dir_frame,
-            textvariable=self.backup_dir_var,
-            font=DesignSystem.get_body_font(),
-            height=40
+    @staticmethod
+    def show(parent, message, type="info", duration=3000):
+        toast = ctk.CTkFrame(
+            parent,
+            fg_color=ModernDesign.BG_CARD,
+            corner_radius=12,
+            border_width=2
         )
-        backup_dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
 
-        def select_backup_dir():
-            dir_path = filedialog.askdirectory()
-            if dir_path:
-                self.backup_dir_var.set(dir_path)
+        border_colors = {
+            "info": ModernDesign.PRIMARY,
+            "success": ModernDesign.SUCCESS,
+            "error": ModernDesign.DANGER,
+            "warning": ModernDesign.WARNING
+        }
+        toast.configure(border_color=border_colors.get(type, ModernDesign.PRIMARY))
 
-        ctk.CTkButton(
-            dir_frame,
-            text="Выбрать",
-            command=select_backup_dir,
-            font=DesignSystem.get_body_font(),
-            width=100,
-            height=40,
-            fg_color=DesignSystem.PRIMARY,
-            hover_color="#1565C0"
-        ).grid(row=0, column=1)
+        icons = {
+            "info": "ℹ️",
+            "success": "✓",
+            "error": "✕",
+            "warning": "⚠️"
+        }
 
-        # Секция автоматического копирования
-        auto_backup_section = ctk.CTkFrame(backup_settings_card, fg_color="transparent")
-        auto_backup_section.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 15))
+        content_frame = ctk.CTkFrame(toast, fg_color="transparent")
+        content_frame.pack(padx=20, pady=15, fill="both", expand=True)
 
         ctk.CTkLabel(
-            auto_backup_section,
-            text="⚡ Автоматизация",
-            font=DesignSystem.get_button_font(),
-            anchor="w"
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+            content_frame,
+            text=icons.get(type, "ℹ️"),
+            font=("Segoe UI", 20),
+            text_color=border_colors.get(type, ModernDesign.PRIMARY)
+        ).pack(side="left", padx=(0, 10))
 
-        # Автоматическое резервное копирование
-        auto_backup_frame = ctk.CTkFrame(auto_backup_section, fg_color=DesignSystem.GRAY_100, corner_radius=8)
-        auto_backup_frame.grid(row=1, column=0, sticky="ew", pady=(0, 5))
-        auto_backup_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            content_frame,
+            text=message,
+            font=ModernDesign.get_body_font(),
+            text_color=ModernDesign.TEXT_PRIMARY,
+            wraplength=300
+        ).pack(side="left", fill="both", expand=True)
 
-        ctk.CTkCheckBox(
-            auto_backup_frame,
-            text="Автоматическое резервное копирование при выходе из приложения",
-            variable=self.auto_backup_var,
-            font=DesignSystem.get_body_font(),
-            fg_color=DesignSystem.PRIMARY,
-            hover_color=DesignSystem.PRIMARY_HOVER
-        ).grid(row=0, column=0, sticky="w", padx=15, pady=15)
+        toast.place(relx=0.5, rely=0.1, anchor="n")
+        toast.lift()
 
-        # Кнопки внизу окна с улучшенным дизайном
-        button_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        button_frame.grid(row=1, column=0, pady=15)
-        button_frame.grid_columnconfigure((0, 1), weight=1)
-
-        # Улучшенные кнопки
-        save_btn = ctk.CTkButton(
-            button_frame,
-            text="✓ Сохранить настройки",
-            command=self.save_settings,
-            font=DesignSystem.get_button_font(),
-            width=180,
-            height=45,
-            fg_color=DesignSystem.SUCCESS,
-            hover_color="#388E3C",
-            corner_radius=8
-        )
-        save_btn.grid(row=0, column=0, padx=10)
-
-        cancel_btn = ctk.CTkButton(
-            button_frame,
-            text="✕ Отмена",
-            command=self.window.destroy,
-            font=DesignSystem.get_button_font(),
-            width=120,
-            height=45,
-            fg_color=DesignSystem.GRAY_400,
-            hover_color="#757575",
-            corner_radius=8
-        )
-        cancel_btn.grid(row=0, column=1, padx=10)
-
-    def save_settings(self):
-        """Сохраняет настройки приложения."""
-        try:
-            import json
-
-            # Безопасное получение значения автоблокировки
-            auto_lock_value = self.auto_lock_var.get().strip()
-            if not auto_lock_value:
-                auto_lock_value = "5"  # Значение по умолчанию
-
+        def fade_out():
             try:
-                auto_lock_time = int(auto_lock_value)
-                if auto_lock_time < 1:
-                    auto_lock_time = 1
-            except ValueError:
-                auto_lock_time = 5
-                messagebox.showwarning("Предупреждение",
-                                       "Некорректное значение времени блокировки. Установлено значение по умолчанию: 5 минут.")
+                toast.destroy()
+            except:
+                pass
 
-            # Сбор значений настроек
-            settings_data = {
-                "auto_lock_time": auto_lock_time,
-                "backup_directory": self.backup_dir_var.get(),
-                "auto_backup": self.auto_backup_var.get()
-            }
+        parent.after(duration, fade_out)
 
-            # Проверка директории для резервных копий
-            backup_dir = settings_data["backup_directory"]
-            if backup_dir and not os.path.exists(backup_dir):
-                os.makedirs(backup_dir, exist_ok=True)
 
-            # Сохранение в JSON-файл
-            with open("app_settings.json", "w", encoding="utf-8") as f:
-                json.dump(settings_data, f, indent=4, ensure_ascii=False)
+class LoginFrame:
+    """Современный экран входа/создания vault"""
 
-            messagebox.showinfo("Информация", "Настройки успешно сохранены!")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить настройки: {e}")
-        finally:
-            self.window.destroy()
+    def __init__(self, root, app_instance):
+        self.root = root
+        self.app = app_instance  # Ссылка на PasswordVaultApp
 
-    def change_master_password(self):
-        """Открывает диалог для изменения мастер-пароля."""
-        change_window = ctk.CTkToplevel(self.window)
-        change_window.title("Изменение мастер-пароля")
-        change_window.geometry("450x300")
-        change_window.minsize(400, 250)
+        # Настройка темы
+        ctk.set_appearance_mode("dark")
 
-        # Настройка адаптивности
-        change_window.grid_columnconfigure(0, weight=1)
-        change_window.grid_rowconfigure(0, weight=1)
+        self.root.title("EVOLS Password Manager")
+        self.root.geometry("1000x700")
+        self.root.minsize(900, 650)
+        self.root.configure(fg_color=ModernDesign.BG_DARK)
 
         # Центрируем окно
-        change_window.transient(self.window)
-        change_window.grab_set()
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(0, weight=1)
 
-        # Основной контейнер
-        main_frame = ctk.CTkFrame(change_window)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-        main_frame.grid_columnconfigure(0, weight=1)
+        # Проверяем, существует ли vault
+        self.vault_exists = os.path.exists(self.app.get_db_path())
+
+        if self.vault_exists:
+            self.show_login_screen()
+        else:
+            self.show_welcome_screen()
+
+    def clear_frame(self):
+        """Очищает окно"""
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    def show_welcome_screen(self):
+        """Экран приветствия для нового пользователя"""
+        self.clear_frame()
+
+        # Главный контейнер
+        main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
+        main_container.grid(row=0, column=0, sticky="nsew")
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_rowconfigure(0, weight=1)
+
+        # Центральная карточка
+        card = ctk.CTkFrame(
+            main_container,
+            fg_color=ModernDesign.BG_CARD,
+            corner_radius=20,
+            border_width=2,
+            border_color=ModernDesign.PRIMARY
+        )
+        card.place(relx=0.5, rely=0.5, anchor="center")
+
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(padx=80, pady=60)
+
+        # Логотип
+        ctk.CTkLabel(
+            content,
+            text="🔐",
+            font=("Segoe UI", 80)
+        ).pack(pady=(0, 20))
 
         # Заголовок
         ctk.CTkLabel(
-            main_frame,
-            text="Изменение мастер-пароля",
-            font=DesignSystem.get_title_font()
-        ).grid(row=0, column=0, pady=(0, 20))
+            content,
+            text="EVOLS",
+            font=("Segoe UI", 42, "bold"),
+            text_color=ModernDesign.PRIMARY
+        ).pack()
 
-        # Поля ввода
-        fields = [
-            {"label": "Текущий мастер-пароль:", "var_name": "current", "row": 1},
-            {"label": "Новый мастер-пароль:", "var_name": "new", "row": 2},
-            {"label": "Подтвердите новый пароль:", "var_name": "confirm", "row": 3}
+        ctk.CTkLabel(
+            content,
+            text="Password Manager",
+            font=("Segoe UI", 18),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack(pady=(5, 40))
+
+        # Приветственное сообщение
+        welcome_text = ctk.CTkFrame(content, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        welcome_text.pack(fill="x", pady=(0, 40))
+
+        ctk.CTkLabel(
+            welcome_text,
+            text="👋 Добро пожаловать!",
+            font=("Segoe UI", 16, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY
+        ).pack(pady=(15, 5), padx=30)
+
+        ctk.CTkLabel(
+            welcome_text,
+            text="Создайте мастер-пароль для защиты ваших данных",
+            font=ModernDesign.get_body_font(),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            wraplength=400
+        ).pack(pady=(0, 15), padx=30)
+
+        # Кнопка создания
+        create_btn = ctk.CTkButton(
+            content,
+            text="🚀 Создать хранилище",
+            command=self.show_create_vault_screen,
+            font=("Segoe UI", 16, "bold"),
+            height=55,
+            width=350,
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=12
+        )
+        create_btn.pack()
+
+        # Дополнительная информация
+        info_frame = ctk.CTkFrame(content, fg_color="transparent")
+        info_frame.pack(pady=(30, 0))
+
+        features = [
+            ("🔒", "AES-256 шифрование"),
+            ("⚡", "Быстрый доступ"),
+            ("🌙", "Современный интерфейс")
         ]
 
-        password_vars = {}
-        for field in fields:
+        for i, (icon, text) in enumerate(features):
+            feature_row = ctk.CTkFrame(info_frame, fg_color="transparent")
+            feature_row.grid(row=i, column=0, pady=5, sticky="w")
+
             ctk.CTkLabel(
-                main_frame,
-                text=field["label"],
-                font=DesignSystem.get_body_font()
-            ).grid(row=field["row"], column=0, sticky="w", pady=(10, 0))
+                feature_row,
+                text=icon,
+                font=("Segoe UI", 16)
+            ).pack(side="left", padx=(0, 10))
 
-            password_vars[field["var_name"]] = ctk.StringVar()
-            entry = ctk.CTkEntry(
-                main_frame,
-                textvariable=password_vars[field["var_name"]],
-                width=300,
-                font=DesignSystem.get_body_font(),
-                show="*"
-            )
-            entry.grid(row=field["row"] + 1, column=0, pady=(5, 10))
-            # Привязка Enter к смене пароля
-            entry.bind("<Return>", lambda event: do_change_password())
+            ctk.CTkLabel(
+                feature_row,
+                text=text,
+                font=ModernDesign.get_caption_font(),
+                text_color=ModernDesign.TEXT_SECONDARY
+            ).pack(side="left")
 
-        def do_change_password():
-            current_password = password_vars["current"].get()
-            new_password = password_vars["new"].get()
-            confirm_password = password_vars["confirm"].get()
+    def show_create_vault_screen(self):
+        """Экран создания нового vault"""
+        self.clear_frame()
 
-            if not current_password or not new_password or not confirm_password:
-                messagebox.showerror("Ошибка", "Все поля должны быть заполнены")
-                return
+        # Главный контейнер
+        main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
+        main_container.grid(row=0, column=0, sticky="nsew")
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_rowconfigure(0, weight=1)
 
-            if new_password != confirm_password:
-                messagebox.showerror("Ошибка", "Новые пароли не совпадают")
-                return
+        # Скроллируемая область
+        scroll_frame = ctk.CTkScrollableFrame(
+            main_container,
+            fg_color="transparent"
+        )
+        scroll_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        scroll_frame.grid_columnconfigure(0, weight=1)
 
-            try:
-                from crypto import Encryptor
-                with open("vault.salt", "rb") as f:
-                    old_salt = f.read()
-                old_encryptor = Encryptor(current_password, old_salt)
+        # Центральная карточка
+        card = ctk.CTkFrame(
+            scroll_frame,
+            fg_color=ModernDesign.BG_CARD,
+            corner_radius=20
+        )
+        card.pack(pady=20, padx=20)
 
-                # Пробуем расшифровать одну запись
-                test = self.db.get_all_passwords()
-                if test:
-                    _ = self.db.get_password(test[0][0])  # Проверка пароля
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(padx=60, pady=50)
+        content.grid_columnconfigure(0, weight=1)
 
-                # Создаем новый шифровальщик
-                new_encryptor = Encryptor(new_password)
-                new_salt = new_encryptor.salt
-
-                # Перешифровываем пароли
-                all_ids = [row[0] for row in self.db.get_all_passwords()]
-                for pid in all_ids:
-                    data = self.db.get_password(pid)
-                    # Расшифровываем
-                    decrypted_username = old_encryptor.decrypt(data['username']) if data['username'] else ""
-                    decrypted_password = old_encryptor.decrypt(data['password'])
-                    decrypted_notes = old_encryptor.decrypt(data['notes']) if data['notes'] else ""
-
-                    # Шифруем новым ключом
-                    enc_username = new_encryptor.encrypt(decrypted_username) if decrypted_username else ""
-                    enc_password = new_encryptor.encrypt(decrypted_password)
-                    enc_notes = new_encryptor.encrypt(decrypted_notes) if decrypted_notes else ""
-
-                    # Обновляем в базе
-                    self.db.cursor.execute(
-                        '''UPDATE passwords SET username=?, password=?, notes=?, 
-                        date_modified=datetime('now') WHERE id=?''',
-                        (enc_username, enc_password, enc_notes, pid)
-                    )
-                self.db.conn.commit()
-
-                # Сохраняем новую соль
-                with open("vault.salt", "wb") as f:
-                    f.write(new_salt)
-
-                # Обновляем encryptor в приложении
-                self.encryptor.salt = new_salt
-                self.encryptor.master_password = new_password
-                self.encryptor._generate_cipher()
-
-                messagebox.showinfo("Успех", "Мастер-пароль успешно изменен!")
-                change_window.destroy()
-
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Ошибка при смене пароля: {e}")
-
-        # Кнопки
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.grid(row=7, column=0, pady=(10, 0))
-
-        ctk.CTkButton(
-            button_frame,
-            text="Изменить",
-            command=do_change_password,
-            font=DesignSystem.get_button_font(),
-            width=120,
-            fg_color=DesignSystem.SUCCESS,
-            hover_color="#388E3C"
-        ).grid(row=0, column=0, padx=10)
-
-        ctk.CTkButton(
-            button_frame,
-            text="Отмена",
-            command=change_window.destroy,
-            font=DesignSystem.get_button_font(),
-            width=100,
-            fg_color="#9E9E9E",
-            hover_color="#757575"
-        ).grid(row=0, column=1, padx=10)
-
-    def setup_2fa(self):
-        """Настраивает двухфакторную аутентификацию TOTP."""
-        if not HAS_2FA_SUPPORT:
-            messagebox.showerror(
-                "Функция недоступна",
-                "Для использования двухфакторной аутентификации необходимо установить библиотеки:\n\n"
-                "pip install pyotp qrcode pillow"
-            )
-            return
-
-        # Запрашиваем текущий мастер-пароль для подтверждения
-        auth_window = ctk.CTkToplevel(self.window)
-        auth_window.title("Подтверждение")
-        auth_window.geometry("450x250")
-        auth_window.minsize(400, 200)
-
-        # Настройка окна
-        auth_window.grid_columnconfigure(0, weight=1)
-        auth_window.grid_rowconfigure(0, weight=1)
-        auth_window.transient(self.window)
-        auth_window.grab_set()
-
-        # Основной контейнер
-        main_frame = ctk.CTkFrame(auth_window)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-        main_frame.grid_columnconfigure(0, weight=1)
+        # Заголовок
+        header = ctk.CTkFrame(content, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 30))
 
         ctk.CTkLabel(
-            main_frame,
-            text="Введите мастер-пароль для подтверждения:",
-            font=DesignSystem.get_body_font(),
-            wraplength=350
-        ).grid(row=0, column=0, pady=(0, 10))
+            header,
+            text="🔐",
+            font=("Segoe UI", 48)
+        ).pack()
 
-        password_var = ctk.StringVar()
-        password_entry = ctk.CTkEntry(
-            main_frame,
-            textvariable=password_var,
-            show="*",
-            width=300,
-            font=DesignSystem.get_body_font()
+        ctk.CTkLabel(
+            header,
+            text="Создание хранилища",
+            font=("Segoe UI", 28, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY
+        ).pack(pady=(10, 5))
+
+        ctk.CTkLabel(
+            header,
+            text="Придумайте надежный мастер-пароль",
+            font=ModernDesign.get_subtitle_font(),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack()
+
+        # Поля ввода
+        fields_frame = ctk.CTkFrame(content, fg_color="transparent")
+        fields_frame.grid(row=1, column=0, sticky="ew", pady=20)
+        fields_frame.grid_columnconfigure(0, weight=1)
+
+        # Переменные
+        self.password_var = ctk.StringVar()
+        self.confirm_var = ctk.StringVar()
+
+        # Индикатор надежности
+        self.strength_label = ctk.CTkLabel(
+            fields_frame,
+            text="",
+            font=ModernDesign.get_caption_font(),
+            text_color=ModernDesign.TEXT_MUTED
         )
-        password_entry.grid(row=1, column=0, pady=(0, 20))
 
-        def verify_and_proceed():
-            current_password = password_var.get()
-            if not current_password:
-                messagebox.showerror("Ошибка", "Введите мастер-пароль")
-                return
+        self.strength_bar = ctk.CTkProgressBar(
+            fields_frame,
+            width=400,
+            height=8,
+            progress_color=ModernDesign.TEXT_MUTED
+        )
 
-            try:
-                # Проверяем пароль через существующий encryptor
-                test_passwords = self.db.get_all_passwords()
-                if test_passwords:
-                    # Пробуем расшифровать существующий пароль
-                    test_data = self.db.get_password(test_passwords[0][0])
-                    # Если получилось расшифровать, значит пароль верный
-                    auth_window.destroy()
-                    self.show_2fa_setup()
-                else:
-                    # Если нет паролей, проверяем через создание временного encryptor
-                    from crypto import Encryptor
-                    with open("vault.salt", "rb") as f:
-                        salt = f.read()
-                    test_encryptor = Encryptor(current_password, salt)
-                    # Если дошли до сюда без ошибки, пароль верный
-                    auth_window.destroy()
-                    self.show_2fa_setup()
+        # Поле мастер-пароля - ИСПРАВЛЕНО!
+        password_section = ctk.CTkFrame(fields_frame, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        password_section.grid(row=0, column=0, sticky="ew", pady=(0, 20))
 
-            except Exception as e:
-                print(f"Ошибка проверки пароля: {e}")
-                messagebox.showerror("Ошибка", "Неверный мастер-пароль")
+        # Используем pack для правильного выравнивания
+        inner_frame = ctk.CTkFrame(password_section, fg_color="transparent")
+        inner_frame.pack(fill="x", padx=20, pady=20)
+
+        ctk.CTkLabel(
+            inner_frame,
+            text="🔑",
+            font=("Segoe UI", 20)
+        ).pack(side="left", padx=(0, 15))
+
+        password_entry_frame = ctk.CTkFrame(inner_frame, fg_color="transparent")
+        password_entry_frame.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        ctk.CTkLabel(
+            password_entry_frame,
+            text="Мастер-пароль",
+            font=("Segoe UI", 11, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 5))
+
+        password_input = ctk.CTkEntry(
+            password_entry_frame,
+            textvariable=self.password_var,
+            show="●",
+            height=45,
+            font=("Segoe UI", 14),
+            border_width=0,
+            fg_color=ModernDesign.BG_DARK,
+            placeholder_text="Введите надежный пароль"
+        )
+        password_input.pack(fill="x")
+
+        # ИСПРАВЛЕННАЯ функция toggle
+        show_btn_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
+        show_btn_container.pack(side="left")
+
+        def toggle_password():
+            if password_input.cget('show') == '●':
+                password_input.configure(show='')
+                show_btn.configure(text="👁️‍🗨️")
+            else:
+                password_input.configure(show='●')
+                show_btn.configure(text="👁️")
+
+        show_btn = ctk.CTkButton(
+            show_btn_container,
+            text="👁️",
+            command=toggle_password,
+            width=45,
+            height=45,
+            font=("Segoe UI", 18),
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        show_btn.pack()
+
+        # Индикатор надежности
+        strength_frame = ctk.CTkFrame(fields_frame, fg_color="transparent")
+        strength_frame.grid(row=1, column=0, sticky="ew", pady=(0, 20))
+        strength_frame.grid_columnconfigure(0, weight=1)
+
+        self.strength_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.strength_bar.set(0)
+
+        self.strength_label.grid(row=1, column=0, sticky="w")
+
+        def on_password_change(*args):
+            password = self.password_var.get()
+            score, color, hint = PasswordStrengthIndicator.check_strength(password)
+
+            self.strength_bar.set(score / 100)
+            self.strength_bar.configure(progress_color=color)
+            self.strength_label.configure(text=hint, text_color=color)
+
+        self.password_var.trace("w", on_password_change)
+
+        # Поле подтверждения - ИСПРАВЛЕНО!
+        confirm_section = ctk.CTkFrame(fields_frame, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        confirm_section.grid(row=2, column=0, sticky="ew")
+
+        # Используем pack для правильного выравнивания
+        confirm_inner = ctk.CTkFrame(confirm_section, fg_color="transparent")
+        confirm_inner.pack(fill="x", padx=20, pady=20)
+
+        ctk.CTkLabel(
+            confirm_inner,
+            text="✓",
+            font=("Segoe UI", 20)
+        ).pack(side="left", padx=(0, 15))
+
+        confirm_entry_frame = ctk.CTkFrame(confirm_inner, fg_color="transparent")
+        confirm_entry_frame.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(
+            confirm_entry_frame,
+            text="Подтверждение пароля",
+            font=("Segoe UI", 11, "bold"),
+            text_color=ModernDesign.TEXT_SECONDARY,
+            anchor="w"
+        ).pack(anchor="w", pady=(0, 5))
+
+        confirm_input = ctk.CTkEntry(
+            confirm_entry_frame,
+            textvariable=self.confirm_var,
+            show="●",
+            height=45,
+            font=("Segoe UI", 14),
+            border_width=0,
+            fg_color=ModernDesign.BG_DARK,
+            placeholder_text="Повторите пароль"
+        )
+        confirm_input.pack(fill="x")
+
+        # Советы
+        tips_frame = ctk.CTkFrame(content, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        tips_frame.grid(row=2, column=0, sticky="ew", pady=(0, 30))
+
+        tips_header = ctk.CTkFrame(tips_frame, fg_color="transparent")
+        tips_header.pack(fill="x", padx=20, pady=(15, 10))
+
+        ctk.CTkLabel(
+            tips_header,
+            text="💡 Советы для надежного пароля",
+            font=("Segoe UI", 13, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY,
+            anchor="w"
+        ).pack(anchor="w")
+
+        tips = [
+            "Используйте минимум 12 символов",
+            "Комбинируйте буквы, цифры и символы",
+            "Избегайте простых слов и дат",
+            "Не используйте один пароль везде"
+        ]
+
+        for tip in tips:
+            tip_row = ctk.CTkFrame(tips_frame, fg_color="transparent")
+            tip_row.pack(fill="x", padx=20, pady=2)
+
+            ctk.CTkLabel(
+                tip_row,
+                text="•",
+                font=ModernDesign.get_body_font(),
+                text_color=ModernDesign.PRIMARY
+            ).pack(side="left", padx=(0, 10))
+
+            ctk.CTkLabel(
+                tip_row,
+                text=tip,
+                font=ModernDesign.get_body_font(),
+                text_color=ModernDesign.TEXT_SECONDARY,
+                anchor="w"
+            ).pack(side="left")
+
+        ctk.CTkLabel(
+            tips_frame,
+            text="",
+            height=5
+        ).pack()
 
         # Кнопки
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.grid(row=2, column=0)
+        buttons_frame = ctk.CTkFrame(content, fg_color="transparent")
+        buttons_frame.grid(row=3, column=0)
 
-        ctk.CTkButton(
-            button_frame,
-            text="Подтвердить",
-            command=verify_and_proceed,
-            font=DesignSystem.get_button_font(),
+        def create_vault():
+            password = self.password_var.get()
+            confirm = self.confirm_var.get()
+
+            if not password:
+                ToastNotification.show(self.root, "Введите мастер-пароль", "error")
+                return
+
+            if len(password) < 8:
+                ToastNotification.show(self.root, "Пароль должен содержать минимум 8 символов", "error")
+                return
+
+            if password != confirm:
+                ToastNotification.show(self.root, "Пароли не совпадают", "error")
+                return
+
+            score, _, _ = PasswordStrengthIndicator.check_strength(password)
+            if score < 40:
+                result = messagebox.askyesno(
+                    "Слабый пароль",
+                    "Ваш пароль недостаточно надежный.\n\nПродолжить всё равно?"
+                )
+                if not result:
+                    return
+
+            # Вызываем метод создания vault из app
+            self.app.create_vault_with_password(password)
+
+        create_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🚀 Создать хранилище",
+            command=create_vault,
+            font=("Segoe UI", 15, "bold"),
+            height=50,
+            width=250,
+            fg_color=ModernDesign.SUCCESS,
+            hover_color="#00C853",
+            corner_radius=10
+        )
+        create_btn.grid(row=0, column=0, padx=10)
+
+        back_btn = ctk.CTkButton(
+            buttons_frame,
+            text="← Назад",
+            command=self.show_welcome_screen,
+            font=ModernDesign.get_button_font(),
+            height=50,
             width=120,
-            fg_color=DesignSystem.PRIMARY,
-            hover_color="#1565C0"
-        ).grid(row=0, column=0, padx=10)
-
-        ctk.CTkButton(
-            button_frame,
-            text="Отмена",
-            command=auth_window.destroy,
-            font=DesignSystem.get_button_font(),
-            width=100,
-            fg_color="#9E9E9E",
-            hover_color="#757575"
-        ).grid(row=0, column=1, padx=10)
+            fg_color=ModernDesign.BG_HOVER,
+            hover_color="#475569",
+            corner_radius=10
+        )
+        back_btn.grid(row=0, column=1, padx=10)
 
         # Привязка Enter
-        password_entry.bind("<Return>", lambda event: verify_and_proceed())
-        password_entry.focus_set()
+        confirm_input.bind("<Return>", lambda e: create_vault())
 
-    def show_2fa_setup(self):
-        """Показывает окно настройки 2FA с улучшенным дизайном."""
-        try:
-            # Генерируем секретный ключ
-            secret_key = pyotp.random_base32()
-            totp = pyotp.TOTP(secret_key)
+    def show_login_screen(self):
+        """Экран входа в существующий vault - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        self.clear_frame()
 
-            # Создаем URI для QR-кода
-            provisioning_uri = totp.provisioning_uri(
-                name="Пользователь EVOLS",
-                issuer_name="EVOLS Password Manager"
-            )
+        # Главный контейнер
+        main_container = ctk.CTkFrame(self.root, fg_color=ModernDesign.BG_DARK)
+        main_container.grid(row=0, column=0, sticky="nsew")
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_rowconfigure(0, weight=1)
 
-            # Создаем окно с адаптивным дизайном
-            setup_window = ctk.CTkToplevel(self.window)
-            setup_window.title("Настройка 2FA")
-            setup_window.geometry("600x700")
-            setup_window.minsize(550, 650)
+        # Центральная карточка
+        card = ctk.CTkFrame(
+            main_container,
+            fg_color=ModernDesign.BG_CARD,
+            corner_radius=20,
+            border_width=2,
+            border_color=ModernDesign.PRIMARY
+        )
+        card.place(relx=0.5, rely=0.5, anchor="center")
 
-            # Настройка адаптивности окна
-            setup_window.grid_columnconfigure(0, weight=1)
-            setup_window.grid_rowconfigure(0, weight=1)
-            setup_window.transient(self.window)
-            setup_window.grab_set()
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(padx=80, pady=60)
 
-            # Основной скроллируемый фрейм
-            scroll_frame = ctk.CTkScrollableFrame(setup_window)
-            scroll_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-            scroll_frame.grid_columnconfigure(0, weight=1)
-
-            # Основной контейнер
-            main_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-            main_frame.grid(row=0, column=0, sticky="ew")
-            main_frame.grid_columnconfigure(0, weight=1)
-
-            # Заголовок
-            title_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-            title_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
-            title_frame.grid_columnconfigure(0, weight=1)
-
-            ctk.CTkLabel(
-                title_frame,
-                text="Настройка двухфакторной\nаутентификации (2FA)",
-                font=DesignSystem.get_title_font(),
-                justify="center"
-            ).grid(row=0, column=0)
-
-            # Инструкции
-            instructions_frame = ctk.CTkFrame(main_frame, fg_color=DesignSystem.GRAY_100)
-            instructions_frame.grid(row=1, column=0, sticky="ew", pady=(0, 20))
-            instructions_frame.grid_columnconfigure(0, weight=1)
-
-            instructions = [
-                "1. Установите приложение аутентификатора:",
-                "   • Google Authenticator",
-                "   • Microsoft Authenticator",
-                "   • Authy или другое совместимое",
-                "",
-                "2. Выберите один из способов настройки:"
-            ]
-
-            for i, text in enumerate(instructions):
-                ctk.CTkLabel(
-                    instructions_frame,
-                    text=text,
-                    font=DesignSystem.get_body_font(),
-                    anchor="w"
-                ).grid(row=i, column=0, sticky="w", padx=10, pady=2)
-
-            # Вкладки для способов настройки
-            tabview = ctk.CTkTabview(main_frame)
-            tabview.grid(row=2, column=0, sticky="ew", pady=(0, 20))
-
-            # Вкладка с QR-кодом (ИСПРАВЛЕНО)
-            qr_tab = tabview.add("QR-код")
-            qr_tab.grid_columnconfigure(0, weight=1)
-
-            # Создаем QR-код с гарантированной конвертацией
-            try:
-                import io
-
-                qr = qrcode.QRCode(version=1, box_size=8, border=4)
-                qr.add_data(provisioning_uri)
-                qr.make(fit=True)
-
-                # Создаем изображение и сразу сохраняем в буфер как PNG
-                qr_image = qr.make_image(fill_color="black", back_color="white")
-
-                buffer = io.BytesIO()
-                qr_image.save(buffer, format='PNG')
-                buffer.seek(0)
-
-                # Открываем из буфера как обычное PIL изображение
-                pil_image = Image.open(buffer).convert('RGB')
-
-                # Теперь это гарантированно PIL.Image.Image
-                qr_ctk_image = ctk.CTkImage(
-                    light_image=pil_image,
-                    dark_image=pil_image,
-                    size=(220, 220)
-                )
-
-                # Инструкция
-                ctk.CTkLabel(
-                    qr_tab,
-                    text="Отсканируйте QR-код приложением аутентификатора:",
-                    font=DesignSystem.get_body_font(),
-                    wraplength=300
-                ).grid(row=0, column=0, pady=(15, 10), padx=20)
-
-                # Отображаем QR-код
-                qr_label = ctk.CTkLabel(
-                    qr_tab,
-                    image=qr_ctk_image,
-                    text=""
-                )
-                qr_label.grid(row=1, column=0, pady=(0, 15))
-
-                # Дополнительная информация под QR-кодом
-                ctk.CTkLabel(
-                    qr_tab,
-                    text="После сканирования приложение добавит новую запись\nдля 'EVOLS Password Manager'",
-                    font=DesignSystem.get_caption_font(),
-                    text_color=DesignSystem.GRAY_600,
-                    justify="center"
-                ).grid(row=2, column=0, pady=(0, 10))
-
-            except Exception as e:
-                print(f"Ошибка создания QR-кода: {e}")
-
-                error_frame = ctk.CTkFrame(qr_tab, fg_color=DesignSystem.GRAY_100)
-                error_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=20)
-
-                ctk.CTkLabel(
-                    error_frame,
-                    text="❌ Не удалось создать QR-код",
-                    font=DesignSystem.get_button_font(),
-                    text_color=DesignSystem.DANGER
-                ).grid(row=0, column=0, padx=15, pady=(10, 5))
-
-                ctk.CTkLabel(
-                    error_frame,
-                    text="Используйте вкладку 'Ручной ввод' для настройки",
-                    font=DesignSystem.get_body_font(),
-                    text_color=DesignSystem.GRAY_600
-                ).grid(row=1, column=0, padx=15, pady=(0, 10))
-
-            # Вкладка с ручным вводом
-            manual_tab = tabview.add("Ручной ввод")
-            manual_tab.grid_columnconfigure(0, weight=1)
-
-            ctk.CTkLabel(
-                manual_tab,
-                text="Введите этот секретный ключ вручную:",
-                font=DesignSystem.get_body_font()
-            ).grid(row=0, column=0, pady=(10, 5))
-
-            # Фрейм для секретного ключа
-            secret_frame = ctk.CTkFrame(manual_tab)
-            secret_frame.grid(row=1, column=0, sticky="ew", pady=10, padx=20)
-            secret_frame.grid_columnconfigure(0, weight=1)
-
-            secret_entry = ctk.CTkEntry(
-                secret_frame,
-                width=400,
-                font=("Courier", 12),
-                justify="center"
-            )
-            secret_entry.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-            secret_entry.insert(0, secret_key)
-            secret_entry.configure(state="readonly")
-
-            def copy_secret():
-                setup_window.clipboard_clear()
-                setup_window.clipboard_append(secret_key)
-                # Временное уведомление
-                old_text = copy_btn.cget("text")
-                copy_btn.configure(text="✓ Скопировано")
-                setup_window.after(2000, lambda: copy_btn.configure(text=old_text))
-
-            copy_btn = ctk.CTkButton(
-                secret_frame,
-                text="Копировать",
-                command=copy_secret,
-                font=DesignSystem.get_body_font(),
-                width=100,
-                fg_color=DesignSystem.SUCCESS,
-                hover_color=DesignSystem.SUCCESS_HOVER
-            )
-            copy_btn.grid(row=1, column=0, pady=5)
-
-            # Проверка кода
-            verification_frame = ctk.CTkFrame(main_frame)
-            verification_frame.grid(row=3, column=0, sticky="ew", pady=(0, 20))
-            verification_frame.grid_columnconfigure(0, weight=1)
-
-            ctk.CTkLabel(
-                verification_frame,
-                text="Введите код из приложения для проверки:",
-                font=DesignSystem.get_button_font()
-            ).grid(row=0, column=0, pady=(15, 5))
-
-            code_frame = ctk.CTkFrame(verification_frame, fg_color="transparent")
-            code_frame.grid(row=1, column=0, pady=(0, 15))
-
-            code_var = ctk.StringVar()
-            code_entry = ctk.CTkEntry(
-                code_frame,
-                textvariable=code_var,
-                width=120,
-                font=("Courier", 16),
-                justify="center",
-                placeholder_text="000000"
-            )
-            code_entry.grid(row=0, column=0, padx=5)
-
-            def verify_and_save():
-                user_code = code_var.get().strip()
-                if not user_code:
-                    messagebox.showerror("Ошибка", "Введите код из приложения")
-                    return
-
-                if len(user_code) != 6 or not user_code.isdigit():
-                    messagebox.showerror("Ошибка", "Код должен состоять из 6 цифр")
-                    return
-
-                if totp.verify(user_code):
-                    # Сохраняем секретный ключ
-                    with open("2fa_secret.key", "w") as f:
-                        f.write(secret_key)
-
-                    messagebox.showinfo(
-                        "Успех",
-                        "Двухфакторная аутентификация успешно настроена!\n\n"
-                        "Теперь при входе потребуется код из приложения."
-                    )
-                    setup_window.destroy()
-                    # Обновляем UI после настройки 2FA
-                    self.setup_ui()
-                else:
-                    messagebox.showerror("Ошибка",
-                                         "Неверный код. Убедитесь, что время на устройствах синхронизировано.")
-
-            verify_btn = ctk.CTkButton(
-                code_frame,
-                text="Проверить и сохранить",
-                command=verify_and_save,
-                font=DesignSystem.get_button_font(),
-                fg_color=DesignSystem.SUCCESS,
-                hover_color=DesignSystem.SUCCESS_HOVER,
-                width=160
-            )
-            verify_btn.grid(row=0, column=1, padx=5)
-
-            # Дополнительная информация
-            info_frame = ctk.CTkFrame(main_frame, fg_color=DesignSystem.GRAY_100)
-            info_frame.grid(row=4, column=0, sticky="ew")
-            info_frame.grid_columnconfigure(0, weight=1)
-
-            info_text = (
-                "💡 Совет: Сохраните секретный ключ в надежном месте.\n"
-                "При потере телефона вы сможете восстановить доступ."
-            )
-
-            ctk.CTkLabel(
-                info_frame,
-                text=info_text,
-                font=DesignSystem.get_caption_font(),
-                text_color=DesignSystem.GRAY_600,
-                justify="left"
-            ).grid(row=0, column=0, padx=15, pady=10)
-
-            # Нижняя панель с кнопкой отмены
-            bottom_frame = ctk.CTkFrame(setup_window, fg_color="transparent")
-            bottom_frame.grid(row=1, column=0, sticky="ew", pady=10)
-            bottom_frame.grid_columnconfigure(0, weight=1)
-
-            ctk.CTkButton(
-                bottom_frame,
-                text="Отмена",
-                command=setup_window.destroy,
-                font=DesignSystem.get_button_font(),
-                width=100,
-                fg_color="#9E9E9E",
-                hover_color="#757575"
-            ).grid(row=0, column=0)
-
-            # Привязки клавиш
-            code_entry.bind("<Return>", lambda event: verify_and_save())
-            setup_window.bind("<Escape>", lambda event: setup_window.destroy())
-
-            # Фокус на поле ввода кода
-            code_entry.focus_set()
-
-        except Exception as e:
-            messagebox.showerror(
-                "Ошибка настройки 2FA",
-                f"Произошла ошибка при настройке двухфакторной аутентификации:\n\n{e}\n\n"
-                f"Убедитесь, что установлены необходимые библиотеки:\n"
-                f"pip install pyotp qrcode pillow"
-            )
-
-    def disable_2fa(self):
-        """Отключает двухфакторную аутентификацию."""
-        # Создаем красивое окно подтверждения
-        confirm_window = ctk.CTkToplevel(self.window)
-        confirm_window.title("Отключение 2FA")
-        confirm_window.geometry("450x200")
-        confirm_window.minsize(400, 180)
-
-        # Настройка окна
-        confirm_window.grid_columnconfigure(0, weight=1)
-        confirm_window.grid_rowconfigure(0, weight=1)
-        confirm_window.transient(self.window)
-        confirm_window.grab_set()
-
-        # Основной контейнер
-        main_frame = ctk.CTkFrame(confirm_window)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-        main_frame.grid_columnconfigure(0, weight=1)
-
-        # Предупреждающая иконка и текст
+        # Логотип
         ctk.CTkLabel(
-            main_frame,
-            text="⚠️",
-            font=("Arial", 32)
-        ).grid(row=0, column=0, pady=(0, 10))
-
-        ctk.CTkLabel(
-            main_frame,
-            text="Отключение двухфакторной аутентификации",
-            font=DesignSystem.get_button_font()
-        ).grid(row=1, column=0)
-
-        ctk.CTkLabel(
-            main_frame,
-            text="Это снизит безопасность вашего хранилища паролей.\nВы уверены, что хотите продолжить?",
-            font=DesignSystem.get_body_font(),
-            justify="center"
-        ).grid(row=2, column=0, pady=(5, 15))
-
-        def do_disable():
-            try:
-                if os.path.exists("2fa_secret.key"):
-                    os.remove("2fa_secret.key")
-
-                messagebox.showinfo("Информация", "Двухфакторная аутентификация отключена")
-                confirm_window.destroy()
-
-                # Обновляем UI
-                self.setup_ui()
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось отключить 2FA: {e}")
-
-        # Кнопки
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.grid(row=3, column=0)
-
-        ctk.CTkButton(
-            button_frame,
-            text="Да, отключить",
-            command=do_disable,
-            font=DesignSystem.get_button_font(),
-            width=120,
-            fg_color=DesignSystem.DANGER,
-            hover_color=DesignSystem.DANGER_HOVER
-        ).grid(row=0, column=0, padx=10)
-
-        ctk.CTkButton(
-            button_frame,
-            text="Отмена",
-            command=confirm_window.destroy,
-            font=DesignSystem.get_button_font(),
-            width=100,
-            fg_color="#9E9E9E",
-            hover_color="#757575"
-        ).grid(row=0, column=1, padx=10)
-
-    def check_all_passwords(self):
-        """Проверяет надежность всех паролей в базе данных."""
-        passwords = self.db.get_all_passwords()
-
-        if not passwords:
-            messagebox.showinfo("Информация", "В базе данных нет сохраненных паролей для проверки")
-            return
-
-        # Создаем окно результатов
-        results_window = ctk.CTkToplevel(self.window)
-        results_window.title("Анализ надежности паролей")
-        results_window.geometry("700x500")
-        results_window.minsize(600, 400)
-
-        # Настройка адаптивности
-        results_window.grid_columnconfigure(0, weight=1)
-        results_window.grid_rowconfigure(0, weight=1)
-        results_window.transient(self.window)
-        results_window.grab_set()
-
-        # Скроллируемый фрейм для результатов
-        scroll_frame = ctk.CTkScrollableFrame(results_window)
-        scroll_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        scroll_frame.grid_columnconfigure(0, weight=1)
+            content,
+            text="🔐",
+            font=("Segoe UI", 70)
+        ).pack(pady=(0, 15))
 
         # Заголовок
         ctk.CTkLabel(
-            scroll_frame,
-            text="Анализ надежности паролей",
-            font=DesignSystem.get_title_font()
-        ).grid(row=0, column=0, pady=(0, 20))
-
-        weak_count = 0
-        medium_count = 0
-        strong_count = 0
-
-        # Анализируем каждый пароль
-        for i, (password_id, title, category) in enumerate(passwords):
-            try:
-                password_data = self.db.get_password(password_id)
-                password = password_data['password']
-
-                # Простая оценка надежности
-                score = 0
-                if len(password) >= 8:
-                    score += 25
-                if len(password) >= 12:
-                    score += 15
-                if any(c.islower() for c in password):
-                    score += 15
-                if any(c.isupper() for c in password):
-                    score += 15
-                if any(c.isdigit() for c in password):
-                    score += 15
-                if any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-                    score += 15
-
-                # Определяем уровень
-                if score >= 70:
-                    level = "Сильный"
-                    color = DesignSystem.SUCCESS
-                    strong_count += 1
-                elif score >= 40:
-                    level = "Средний"
-                    color = DesignSystem.WARNING
-                    medium_count += 1
-                else:
-                    level = "Слабый"
-                    color = DesignSystem.DANGER
-                    weak_count += 1
-
-                # Создаем карточку для каждого пароля
-                card = ctk.CTkFrame(scroll_frame)
-                card.grid(row=i + 1, column=0, sticky="ew", pady=5)
-                card.grid_columnconfigure(1, weight=1)
-
-                # Название
-                ctk.CTkLabel(
-                    card,
-                    text=title,
-                    font=DesignSystem.get_button_font()
-                ).grid(row=0, column=0, sticky="w", padx=10, pady=5)
-
-                # Уровень надежности
-                ctk.CTkLabel(
-                    card,
-                    text=f"{level} ({score}/100)",
-                    font=DesignSystem.get_body_font(),
-                    text_color=color
-                ).grid(row=0, column=1, sticky="e", padx=10, pady=5)
-
-            except Exception as e:
-                print(f"Ошибка анализа пароля {title}: {e}")
-                continue
-
-        # Статистика
-        stats_frame = ctk.CTkFrame(scroll_frame, fg_color=DesignSystem.GRAY_100)
-        stats_frame.grid(row=len(passwords) + 1, column=0, sticky="ew", pady=(20, 0))
+            content,
+            text="С возвращением!",
+            font=("Segoe UI", 32, "bold"),
+            text_color=ModernDesign.TEXT_PRIMARY
+        ).pack()
 
         ctk.CTkLabel(
-            stats_frame,
-            text="Статистика:",
-            font=DesignSystem.get_button_font()
-        ).grid(row=0, column=0, sticky="w", padx=15, pady=(10, 5))
+            content,
+            text="Введите мастер-пароль для доступа",
+            font=ModernDesign.get_subtitle_font(),
+            text_color=ModernDesign.TEXT_SECONDARY
+        ).pack(pady=(5, 40))
 
-        stats_text = f"Сильных: {strong_count} | Средних: {medium_count} | Слабых: {weak_count}"
+        # Поле пароля - ИСПРАВЛЕНО!
+        password_section = ctk.CTkFrame(content, fg_color=ModernDesign.BG_HOVER, corner_radius=12)
+        password_section.pack(fill="x", pady=(0, 30))
+
+        # Используем pack вместо grid для лучшего выравнивания
+        inner_frame = ctk.CTkFrame(password_section, fg_color="transparent")
+        inner_frame.pack(fill="x", padx=20, pady=20)
+
+        # Иконка ключа
         ctk.CTkLabel(
-            stats_frame,
-            text=stats_text,
-            font=DesignSystem.get_body_font()
-        ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 10))
+            inner_frame,
+            text="🔑",
+            font=("Segoe UI", 24)
+        ).pack(side="left", padx=(5, 15))
 
-        # Кнопка закрытия
-        ctk.CTkButton(
-            results_window,
-            text="Закрыть",
-            command=results_window.destroy,
-            font=DesignSystem.get_button_font(),
-            width=100
-        ).grid(row=1, column=0, pady=10)
+        # Контейнер для поля ввода
+        entry_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
+        entry_container.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self.login_password_var = ctk.StringVar()
+
+        password_input = ctk.CTkEntry(
+            entry_container,
+            textvariable=self.login_password_var,
+            show="●",
+            height=50,
+            font=("Segoe UI", 15),
+            border_width=0,
+            fg_color=ModernDesign.BG_DARK,
+            placeholder_text="Мастер-пароль"
+        )
+        password_input.pack(fill="x")
+
+        # ИСПРАВЛЕННАЯ функция toggle - правильная область видимости
+        show_btn_container = ctk.CTkFrame(inner_frame, fg_color="transparent")
+        show_btn_container.pack(side="left")
+
+        def toggle_login_password():
+            if password_input.cget('show') == '●':
+                password_input.configure(show='')
+                show_btn.configure(text="👁️‍🗨️")
+            else:
+                password_input.configure(show='●')
+                show_btn.configure(text="👁️")
+
+        show_btn = ctk.CTkButton(
+            show_btn_container,
+            text="👁️",
+            command=toggle_login_password,
+            width=50,
+            height=50,
+            font=("Segoe UI", 20),
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=8
+        )
+        show_btn.pack()
+
+        # Кнопка входа
+        def do_login():
+            password = self.login_password_var.get()
+
+            if not password:
+                ToastNotification.show(self.root, "Введите пароль", "error")
+                return
+
+            # Вызываем метод входа из app
+            self.app.login_with_password(password)
+
+        login_btn = ctk.CTkButton(
+            content,
+            text="🚀 Войти",
+            command=do_login,
+            font=("Segoe UI", 16, "bold"),
+            height=55,
+            width=400,
+            fg_color=ModernDesign.PRIMARY,
+            hover_color=ModernDesign.PRIMARY_DARK,
+            corner_radius=12
+        )
+        login_btn.pack()
+
+        # Информация внизу
+        info_frame = ctk.CTkFrame(content, fg_color="transparent")
+        info_frame.pack(pady=(30, 0))
+
+        ctk.CTkLabel(
+            info_frame,
+            text="🔒 Ваши данные защищены AES-256 шифрованием",
+            font=ModernDesign.get_caption_font(),
+            text_color=ModernDesign.TEXT_MUTED
+        ).pack()
+
+        # Привязка Enter
+        password_input.bind("<Return>", lambda e: do_login())
+        password_input.focus_set()
