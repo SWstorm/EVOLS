@@ -5,7 +5,97 @@ import string
 import re
 
 
-# === СОВРЕМЕННАЯ СИСТЕМА ДИЗАЙНА (единая с main_window) ===
+
+class GlobalHotkeys:
+    """Глобальные горячие клавиши для всех окон"""
+    
+    @staticmethod
+    def setup(window):
+        """Настраивает горячие клавиши для любого окна"""
+        
+        def select_all(event=None):
+            """Ctrl+A - выделить все"""
+            try:
+                focused = window.focus_get()
+                if focused:
+                    if hasattr(focused, 'select_range'):
+                        focused.select_range(0, 'end')
+                        focused.icursor('end')
+                    elif hasattr(focused, 'tag_add'):
+                        focused.tag_add('sel', '1.0', 'end')
+                        focused.mark_set('insert', 'end')
+            except:
+                pass
+            return "break"
+        
+        def copy_text(event=None):
+            """Ctrl+C - копировать"""
+            try:
+                focused = window.focus_get()
+                if focused:
+                    try:
+                        if hasattr(focused, 'selection_get'):
+                            text = focused.selection_get()
+                            window.clipboard_clear()
+                            window.clipboard_append(text)
+                    except:
+                        if hasattr(focused, 'get'):
+                            try:
+                                text = focused.get() if hasattr(focused, 'index') else focused.get('1.0', 'end-1c')
+                                if text:
+                                    window.clipboard_clear()
+                                    window.clipboard_append(text)
+                            except:
+                                pass
+            except:
+                pass
+            return "break"
+        
+        def paste_text(event=None):
+            """Ctrl+V - вставить"""
+            try:
+                clipboard_text = window.clipboard_get()
+                focused = window.focus_get()
+                
+                if focused and hasattr(focused, 'insert'):
+                    try:
+                        if hasattr(focused, 'selection_present') and focused.selection_present():
+                            focused.delete('sel.first', 'sel.last')
+                    except:
+                        pass
+                    focused.insert('insert', clipboard_text)
+            except:
+                pass
+            return "break"
+        
+        def cut_text(event=None):
+            """Ctrl+X - вырезать"""
+            try:
+                focused = window.focus_get()
+                if focused:
+                    try:
+                        text = focused.selection_get()
+                        window.clipboard_clear()
+                        window.clipboard_append(text)
+                        if hasattr(focused, 'delete'):
+                            focused.delete('sel.first', 'sel.last')
+                    except:
+                        pass
+            except:
+                pass
+            return "break"
+        
+        # Привязываем клавиши
+        window.bind('<Control-a>', select_all)
+        window.bind('<Control-A>', select_all)
+        window.bind('<Control-c>', copy_text)
+        window.bind('<Control-C>', copy_text)
+        window.bind('<Control-v>', paste_text)
+        window.bind('<Control-V>', paste_text)
+        window.bind('<Control-x>', cut_text)
+        window.bind('<Control-X>', cut_text)
+
+
 class ModernDesign:
     """Крутая система дизайна"""
 
